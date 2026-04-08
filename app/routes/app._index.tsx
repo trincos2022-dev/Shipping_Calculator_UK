@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useSearchParams } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import ConnectionPanel from "../components/admin/ConnectionPanel";
 import RateSettingsPanel from "../components/admin/RateSettings";
 import DataTables from "../components/admin/DataTables";
@@ -15,7 +16,12 @@ import type {
 } from "../components/admin/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const authResult = await authenticate.admin(request);
+  if (authResult instanceof Response) {
+    return authResult;
+  }
+
+  const { session } = authResult ?? {};
 
   const mainData: ProductRow[] = [
     { sku: "UK-1001", title: "Lightweight Carrier Bag", price: "12.99", stock: 23, source: "Supabase" },
@@ -86,9 +92,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     checkoutCallbackEnabled: false,
   };
 
+  // Fetch or create shop-specific rate settings
+  let settings = await prisma.settings.findUnique({
+    where: { shop: session.shop },
+  });
+  if (!settings) {
+    settings = await prisma.settings.create({
+      data: {
+        shop: session.shop,
+        taxPercentage: 20,
+        carrierCharge: 5,
+      },
+    });
+  }
   const rateSettings: RateSettings = {
-    taxRate: 20,
-    carrierCharge: 5,
+    taxRate: settings.taxPercentage,
+    carrierCharge: settings.carrierCharge,
   };
 
   return { mainData, mappingRows, logs, connection, rateSettings };
@@ -96,10 +115,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Index() {
   const { mainData, mappingRows, logs, connection, rateSettings } = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
   const [currentConnection, setCurrentConnection] = useState<ConnectionInfo>(connection);
   const [currentRates, setCurrentRates] = useState<RateSettings>(rateSettings);
   const [currentMapping, setCurrentMapping] = useState<MappingRow[]>(mappingRows);
   const [logEntries, setLogEntries] = useState<LogRow[]>(logs);
+
+  const showSuccess = searchParams.get("updated") === "true";
+  const errorMessage = searchParams.get("error");
+
+  // Update local state when rateSettings changes (from loader after redirect)
+  useEffect(() => {
+    setCurrentRates(rateSettings);
+  }, [rateSettings]);
+
+  // Auto-hide success/error messages after 5 seconds
+  useEffect(() => {
+    if (showSuccess || errorMessage) {
+      const timer = setTimeout(() => {
+        // Clear the query params by replacing the URL without the notification params
+        window.history.replaceState({}, "", "/app");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccess, errorMessage]);
 
   const pageStyles: React.CSSProperties = {
     maxWidth: 1200,
@@ -123,6 +162,7 @@ export default function Index() {
     backgroundColor: "#ffffff",
     border: "1px solid #e2e8f0",
     boxShadow: "0 1px 4px rgba(15, 23, 42, 0.06)",
+    transition: "box-shadow 0.3s ease",
   };
 
   const handleToggleConnection = (connected: boolean) => {
@@ -141,23 +181,6 @@ export default function Index() {
         total: "0.00",
         status: "Done",
         note: connected ? "Shopify callback connected" : "Shopify callback disconnected",
-        timestamp: new Date().toLocaleString(),
-      },
-      ...current,
-    ]);
-  };
-
-  const handleSaveRates = (updatedSettings: RateSettings) => {
-    setCurrentRates(updatedSettings);
-    setLogEntries((current) => [
-      {
-        sku: "SYSTEM",
-        basePrice: "0.00",
-        tax: "0.00",
-        carrierCharge: "0.00",
-        total: "0.00",
-        status: "Done",
-        note: `Rate defaults updated to ${updatedSettings.taxRate}% tax and £${updatedSettings.carrierCharge} carrier`,
         timestamp: new Date().toLocaleString(),
       },
       ...current,
@@ -205,9 +228,45 @@ export default function Index() {
         </p>
       </header>
 
+      {showSuccess && (
+        <div style={{
+          marginBottom: 20,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#d1fae5",
+          border: "1px solid #10b981",
+          color: "#065f46",
+          fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}>
+          ✓ Rate settings updated successfully!
+        </div>
+      )}
+
+      {errorMessage && (
+        <div style={{
+          marginBottom: 20,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#fee2e2",
+          border: "1px solid #ef4444",
+          color: "#991b1b",
+          fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}>
+          ✗ Error: {
+            errorMessage === "missing-fields" 
+              ? "Please fill in all fields" 
+              : errorMessage === "invalid-values"
+              ? "Invalid number values"
+              : "Server error - please try again"
+          }
+        </div>
+      )}
+
       <section style={sectionGridStyles}>
         <ConnectionPanel connection={currentConnection} onToggleConnection={handleToggleConnection} />
-        <RateSettingsPanel settings={currentRates} onSaveRates={handleSaveRates} />
+        <RateSettingsPanel settings={currentRates} />
       </section>
 
       <DataTables products={mainData} mappingRows={currentMapping} onManualSync={handleManualSync} />

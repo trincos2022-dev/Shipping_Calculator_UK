@@ -1,9 +1,8 @@
-import { useState, type FormEvent } from "react";
+ import { useState, type FormEvent } from "react";
 import type { RateSettings } from "./types";
 
 interface Props {
   settings: RateSettings;
-  onSaveRates: (settings: RateSettings) => void;
 }
 
 const panelStyles: React.CSSProperties = {
@@ -12,6 +11,7 @@ const panelStyles: React.CSSProperties = {
   borderRadius: 12,
   backgroundColor: "#ffffff",
   boxShadow: "0 1px 4px rgba(15, 23, 42, 0.06)",
+  transition: "box-shadow 0.3s ease",
 };
 
 const fieldGroupStyles: React.CSSProperties = {
@@ -25,6 +25,7 @@ const fieldStyles: React.CSSProperties = {
   display: "block",
   fontWeight: 600,
   color: "#334155",
+  transition: "color 0.2s ease",
 };
 
 const inputStyles: React.CSSProperties = {
@@ -33,15 +34,23 @@ const inputStyles: React.CSSProperties = {
   padding: 10,
   border: "1px solid #cbd5e1",
   borderRadius: 8,
+  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+  outline: "none",
 };
 
-export default function RateSettingsPanel({ settings, onSaveRates }: Props) {
-  const [taxRate, setTaxRate] = useState(settings.taxRate);
-  const [carrierCharge, setCarrierCharge] = useState(settings.carrierCharge);
+inputStyles[":focus"] = {
+  borderColor: "#3b82f6",
+  boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)",
+};
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSaveRates({ taxRate: Number(taxRate), carrierCharge: Number(carrierCharge) });
+export default function RateSettingsPanel({ settings }: Props) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    const form = e.currentTarget;
+    const taxRate = (form.elements.namedItem("taxRate") as HTMLInputElement)?.value;
+    const carrierCharge = (form.elements.namedItem("carrierCharge") as HTMLInputElement)?.value;
+    console.log("Form submitting with:", { taxRate, carrierCharge });
   };
 
   return (
@@ -51,16 +60,18 @@ export default function RateSettingsPanel({ settings, onSaveRates }: Props) {
         Update the default tax percentage and fallback carrier charge used for price estimates.
       </p>
 
-      <form onSubmit={handleSubmit}>
+      <form method="post" onSubmit={handleSubmit}>
         <div style={fieldGroupStyles}>
           <label style={fieldStyles}>
             Tax rate (%)
             <input
               type="number"
-              min={0}
-              value={taxRate}
-              onChange={(event) => setTaxRate(Number(event.target.value))}
+              name="taxRate"
+              inputMode="decimal"
+              min="0"
+              defaultValue={settings.taxRate}
               style={inputStyles}
+              required
             />
           </label>
 
@@ -68,25 +79,31 @@ export default function RateSettingsPanel({ settings, onSaveRates }: Props) {
             Default carrier charge (£)
             <input
               type="number"
-              min={0}
-              step={0.5}
-              value={carrierCharge}
-              onChange={(event) => setCarrierCharge(Number(event.target.value))}
+              name="carrierCharge"
+              inputMode="decimal"
+              min="0"
+              step="0.5"
+              defaultValue={settings.carrierCharge}
               style={inputStyles}
+              required
             />
           </label>
         </div>
 
         <button
           type="submit"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           style={{
             cursor: "pointer",
             padding: "10px 18px",
             borderRadius: 8,
             border: "none",
-            backgroundColor: "#2f6fdb",
+            backgroundColor: isHovered ? "#2563eb" : "#2f6fdb",
             color: "#ffffff",
             fontWeight: 700,
+            transition: "background-color 0.2s ease, transform 0.1s ease",
+            transform: isHovered ? "translateY(-1px)" : "translateY(0)",
           }}
         >
           Save rate defaults
@@ -94,7 +111,7 @@ export default function RateSettingsPanel({ settings, onSaveRates }: Props) {
       </form>
 
       <div style={{ marginTop: 18, fontSize: 14, color: "#334155" }}>
-        <strong>Current fallback values:</strong>
+        <strong>Current values:</strong>
         <div>Tax rate: {settings.taxRate}%</div>
         <div>Carrier charge: £{settings.carrierCharge}</div>
       </div>
