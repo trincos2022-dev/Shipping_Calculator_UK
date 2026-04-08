@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useSearchParams } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useLoaderData, useSearchParams, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { syncProductsForShop } from "../lib/productSync";
 import ConnectionPanel from "../components/admin/ConnectionPanel";
 import RateSettingsPanel from "../components/admin/RateSettings";
 import DataTables from "../components/admin/DataTables";
@@ -15,6 +16,37 @@ import type {
   LogRow,
 } from "../components/admin/types";
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const authResult = await authenticate.admin(request);
+  if (authResult instanceof Response) {
+    return authResult;
+  }
+
+  const { session } = authResult ?? {};
+  if (!session || !session.shop) {
+    return redirect("/?error=no-session");
+  }
+
+  const formData = await request.formData();
+  const action = formData.get("action");
+
+  if (action === "sync-products") {
+    try {
+      const result = await syncProductsForShop(session.shop);
+      if (result.success) {
+        return redirect("/app?sync-success=true&processed=" + result.processed + "&total=" + result.total);
+      } else {
+        return redirect("/app?sync-error=" + encodeURIComponent(result.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Sync action failed:", error);
+      return redirect("/app?sync-error=" + encodeURIComponent("Sync failed"));
+    }
+  }
+
+  return redirect("/app");
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const authResult = await authenticate.admin(request);
   if (authResult instanceof Response) {
@@ -23,66 +55,77 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const { session } = authResult ?? {};
 
-  const mainData: ProductRow[] = [
-    { sku: "UK-1001", title: "Lightweight Carrier Bag", price: "12.99", stock: 23, source: "Supabase" },
-    { sku: "UK-1002", title: "Weatherproof Envelope", price: "8.50", stock: 42, source: "Supabase" },
-    { sku: "UK-1003", title: "Courier Priority Label", price: "5.00", stock: 104, source: "Supabase" },
-  ];
+  // Count eligible source products from the source-of-truth table.
+  const productCount = await prisma.shopify_products_final_UK.count({
+    where: {
+      sku: { not: null },
+      price: { not: null },
+      part_number: { not: null },
+    },
+  });
 
-  const mappingRows: MappingRow[] = [
-    {
-      appSku: "UK-1001",
-      shopifySku: "SHOP-01",
-      status: "Mapped",
-      lastSynced: "2026-04-05 10:32",
-      details: "Ready for checkout callback",
+  const productSamples = await prisma.shopify_products_final_UK.findMany({
+    where: {
+      sku: { not: null },
+      price: { not: null },
+      part_number: { not: null },
     },
-    {
-      appSku: "UK-1002",
-      shopifySku: "SHOP-02",
-      status: "Pending",
-      lastSynced: "2026-04-06 08:15",
-      details: "Awaiting manual sync",
+    select: {
+      sku: true,
+      title: true,
+      inventory_quantity: true,
+      price: true,
     },
-    {
-      appSku: "UK-1003",
-      shopifySku: "SHOP-03",
-      status: "Missing",
-      lastSynced: "—",
-      details: "No matching Shopify SKU",
+    take: 50,
+  });
+
+  const mainData: ProductRow[] = productSamples.map((p) => ({
+    sku: p.sku || "",
+    title: p.title || "",
+    price: p.price?.toString() || "",
+    stock: p.inventory_quantity || 0,
+    source: "Supabase",
+  }));
+
+  // Fetch mapping statistics and sample mapping rows from ProductMapping_UK.
+  const mappingCount = await prisma.productMapping_UK.count({
+    where: { shop: session.shop },
+  });
+
+  const mappings = await prisma.productMapping_UK.findMany({
+    where: { shop: session.shop },
+    select: {
+      sku: true,
+      price: true,
+      ingramPartNumber: true,
+      updatedAt: true,
     },
-  ];
+    take: 50,
+  });
+
+  const mappingRows: MappingRow[] = mappings.map((m) => ({
+    appSku: m.sku,
+    shopifySku: m.sku,
+    status: "Mapped",
+    lastSynced: m.updatedAt.toLocaleString(),
+    details: `Part: ${m.ingramPartNumber}`,
+  }));
+
+  const latestSyncJob = await prisma.productSyncJob_UK.findFirst({
+    where: { shop: session.shop },
+    orderBy: { createdAt: "desc" },
+  });
 
   const logs: LogRow[] = [
     {
-      sku: "UK-1001",
-      basePrice: "12.99",
-      tax: "2.60",
-      carrierCharge: "5.00",
-      total: "20.59",
-      status: "Done",
-      note: "Checkout callback success",
-      timestamp: "2026-04-06 14:05",
-    },
-    {
-      sku: "UK-1002",
-      basePrice: "8.50",
-      tax: "1.70",
-      carrierCharge: "5.00",
-      total: "15.20",
-      status: "Failed",
-      note: "Webhook validation failed",
-      timestamp: "2026-04-06 14:12",
-    },
-    {
-      sku: "UK-1003",
-      basePrice: "5.00",
-      tax: "1.00",
-      carrierCharge: "5.00",
-      total: "11.00",
-      status: "Done",
-      note: "Manual SKU sync recorded",
-      timestamp: "2026-04-07 09:40",
+      sku: "SYSTEM",
+      basePrice: "0.00",
+      tax: "0.00",
+      carrierCharge: "0.00",
+      total: "0.00",
+      status: "Info",
+      note: `${mappingCount} products mapped, ${productCount} available in source`,
+      timestamp: new Date().toLocaleString(),
     },
   ];
 
@@ -110,11 +153,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     carrierCharge: settings.carrierCharge,
   };
 
-  return { mainData, mappingRows, logs, connection, rateSettings };
+  return { mainData, mappingRows, logs, connection, rateSettings, productCount, mappingCount, latestSyncJob };
 };
 
 export default function Index() {
-  const { mainData, mappingRows, logs, connection, rateSettings } = useLoaderData<typeof loader>();
+  const { mainData, mappingRows, logs, connection, rateSettings, productCount, mappingCount, latestSyncJob } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const [currentConnection, setCurrentConnection] = useState<ConnectionInfo>(connection);
   const [currentRates, setCurrentRates] = useState<RateSettings>(rateSettings);
@@ -123,6 +166,10 @@ export default function Index() {
 
   const showSuccess = searchParams.get("updated") === "true";
   const errorMessage = searchParams.get("error");
+  const syncSuccess = searchParams.get("sync-success") === "true";
+  const syncError = searchParams.get("sync-error");
+  const processed = searchParams.get("processed");
+  const total = searchParams.get("total");
 
   // Update local state when rateSettings changes (from loader after redirect)
   useEffect(() => {
@@ -131,14 +178,14 @@ export default function Index() {
 
   // Auto-hide success/error messages after 5 seconds
   useEffect(() => {
-    if (showSuccess || errorMessage) {
+    if (showSuccess || errorMessage || syncSuccess || syncError) {
       const timer = setTimeout(() => {
         // Clear the query params by replacing the URL without the notification params
         window.history.replaceState({}, "", "/app");
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [showSuccess, errorMessage]);
+  }, [showSuccess, errorMessage, syncSuccess, syncError]);
 
   const pageStyles: React.CSSProperties = {
     maxWidth: 1200,
@@ -228,6 +275,36 @@ export default function Index() {
         </p>
       </header>
 
+      {syncSuccess && (
+        <div style={{
+          marginBottom: 20,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#d1fae5",
+          border: "1px solid #10b981",
+          color: "#065f46",
+          fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}>
+          ✓ Product sync completed! Synced {processed}/{total} products.
+        </div>
+      )}
+
+      {syncError && (
+        <div style={{
+          marginBottom: 20,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#fee2e2",
+          border: "1px solid #ef4444",
+          color: "#991b1b",
+          fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}>
+          ✗ Sync failed: {decodeURIComponent(syncError)}
+        </div>
+      )}
+
       {showSuccess && (
         <div style={{
           marginBottom: 20,
@@ -269,7 +346,7 @@ export default function Index() {
         <RateSettingsPanel settings={currentRates} />
       </section>
 
-      <DataTables products={mainData} mappingRows={currentMapping} onManualSync={handleManualSync} />
+      <DataTables products={mainData} mappingRows={currentMapping} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
       <LogsPanel logs={logEntries} />
     </main>
   );

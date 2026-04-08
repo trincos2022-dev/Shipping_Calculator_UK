@@ -20,7 +20,7 @@ export interface LogRow {
   tax: string;
   carrierCharge: string;
   total: string;
-  status: "Done" | "Failed";
+  status: "Done" | "Failed" | "Info";
   note: string;
   timestamp: string;
 }
