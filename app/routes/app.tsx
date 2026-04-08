@@ -67,7 +67,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const authResult = await authenticate.admin(request);
+  if (authResult instanceof Response) {
+    return authResult;
+  }
+
+  const { session } = authResult ?? {};
+  if (!session || !session.shop) {
+    console.error("No session or shop found in app loader");
+    return redirect("/?error=no-session");
+  }
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

@@ -39,3 +39,58 @@ model Session {
 
   @@map("sessions")
 }
+
+model ProductMapping_UK {
+  id               String   @id @default(cuid())
+  shop             String
+  sku              String
+  price            Decimal
+  ingramPartNumber String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([shop, sku])
+  @@index([shop])
+}
+
+model shopify_products_final_UK {
+  id                   BigInt    @id(map: "shopify_products_final_uk_pkey")
+  title                String?
+  body_html            String?
+  handle               String?
+  vendor               String?
+  product_type         String?
+  tags                 String?
+  images               Json?
+  sku                  String?   @unique(map: "shopify_products_final_uk_sku_key")
+  inventory_management String?
+  inventory_quantity   Int?
+  price                Decimal?  @db.Decimal
+  compare_at_price     Decimal?  @db.Decimal
+  barcode              String?
+  specs_table          String?
+  information          String?
+  created_at           DateTime? @default(now()) @db.Timestamptz(6)
+  part_number          String?
+  source_type          String?
+
+  @@index([id], map: "idx_products_id")
+}
+
+model ProductSyncJob_UK {
+  id          String   @id
+  shop        String
+  status      String
+  processed   Int      @default(0)
+  total       Int      @default(0)
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  finishedAt  DateTime?
+
+  @@index([shop], name: "ProductSyncJob_UK_shop_idx")
+  @@index([status], name: "ProductSyncJob_UK_status_idx")
+  @@index([createdAt], name: "ProductSyncJob_UK_createdAt_idx")
+
+  @@map("ProductSyncJob_UK")
+}
