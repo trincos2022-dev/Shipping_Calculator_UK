@@ -125,17 +125,19 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
     };
   }
 
+  // Calculate only shipping costs: tax on items + carrier charge
+  // Note: basePrice is not included - Shopify adds that separately
   const taxAmount = totalPrice * (settings.taxPercentage / 100);
   const carrierCharge = settings.carrierCharge;
-  const finalTotal = totalPrice + taxAmount + carrierCharge;
+  const shippingCost = taxAmount + carrierCharge;
 
-  console.log("Final calculation:", { totalPrice, taxAmount, carrierCharge, finalTotal });
+  console.log("Final calculation:", { totalPrice, taxAmount, carrierCharge, shippingCost });
 
   const response = {
     rates: [{
       service_name: "UK Standard Shipping",
       service_code: "UK_STD",
-      total_price: Math.round(finalTotal * 100).toString(),
+      total_price: Math.round(shippingCost * 100).toString(),
       currency: "GBP",
       description: "Standard delivery within the UK",
     }],
