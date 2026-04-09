@@ -127,3 +127,21 @@ model CarrierService {
   @@index([shop])
   @@map("CarrierService")
 }
+
+model RequestLog {
+  id          String   @id @default(cuid())
+  shop        String
+  type        String   // "incoming" or "outgoing"
+  endpoint    String
+  method      String
+  requestBody String?
+  responseBody String?
+  status      Int?
+  error       String?
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([shop])
+  @@index([createdAt])
+  @@map("RequestLog")
+}

@@ -54,3 +54,17 @@ export interface ShippingCalculationResult {
   total?: number;
   error?: string;
 }
+
+export interface RequestLogEntry {
+  id: string;
+  shop: string;
+  type: string;
+  endpoint: string;
+  method: string;
+  requestBody: string | null;
+  responseBody: string | null;
+  status: number | null;
+  error: string | null;
+  durationMs: number | null;
+  createdAt: string | Date;
+}

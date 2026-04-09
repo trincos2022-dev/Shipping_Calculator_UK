@@ -10,12 +10,14 @@ import RateSettingsPanel from "../components/admin/RateSettings";
 import ShippingCalculatorPanel from "../components/admin/ShippingCalculator";
 import DataTables from "../components/admin/DataTables";
 import LogsPanel from "../components/admin/LogsPanel";
+import RequestLogsPanel from "../components/admin/RequestLogsPanel";
 import type {
   CarrierServiceInfo,
   RateSettings,
   MappingRow,
   ProductRow,
   LogRow,
+  RequestLogEntry,
 } from "../components/admin/types";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -203,6 +205,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timestamp: log.createdAt.toLocaleString(),
   }));
 
+  const requestLogsRaw = await prisma.requestLog.findMany({
+    where: { shop: session.shop },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+
+  const requestLogs: RequestLogEntry[] = requestLogsRaw.map((log) => ({
+    id: log.id,
+    shop: log.shop,
+    type: log.type,
+    endpoint: log.endpoint,
+    method: log.method,
+    requestBody: log.requestBody,
+    responseBody: log.responseBody,
+    status: log.status,
+    error: log.error,
+    durationMs: log.durationMs,
+    createdAt: log.createdAt,
+  }));
+
   let carrierService: CarrierServiceInfo | null = null;
   try {
     carrierService = await findExistingCarrierService(session.shop, session.accessToken);
@@ -239,11 +261,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     carrierCharge: settings.carrierCharge,
   };
 
-  return { mainData, mappingRows, logs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob };
+  return { mainData, mappingRows, logs, requestLogs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob };
 };
 
 export default function Index() {
-  const { mainData, mappingRows, logs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob } = useLoaderData<typeof loader>();
+  const { mainData, mappingRows, logs, requestLogs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const [currentRates, setCurrentRates] = useState<RateSettings>(rateSettings);
 
@@ -400,6 +422,15 @@ export default function Index() {
           defaultTaxRate={currentRates.taxRate} 
         />
       </div>
+
+      <div style={{ marginTop: 20 }}>
+        <ShippingCalculatorPanel 
+          defaultCarrierCharge={currentRates.carrierCharge} 
+          defaultTaxRate={currentRates.taxRate} 
+        />
+      </div>
+
+      <RequestLogsPanel logs={requestLogs} />
 
       <DataTables products={mainData} mappingRows={mappingRows} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
       <LogsPanel logs={logs} />
