@@ -31,6 +31,13 @@ export interface ConnectionInfo {
   checkoutCallbackEnabled: boolean;
 }
 
+export interface CarrierServiceInfo {
+  id: number;
+  name: string;
+  callbackUrl: string;
+  active: boolean;
+}
+
 export interface RateSettings {
   taxRate: number;
   carrierCharge: number;

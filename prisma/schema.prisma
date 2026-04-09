@@ -113,3 +113,17 @@ model ShippingCalculationLog {
 
   @@map("ShippingCalculationLog")
 }
+
+model CarrierService {
+  id           String   @id @default(cuid())
+  shop         String   @unique
+  serviceId    Int
+  serviceName  String
+  callbackUrl  String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([shop])
+  @@map("CarrierService")
+}

@@ -4,13 +4,14 @@ import { useLoaderData, useSearchParams, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncProductsForShop, cancelSyncJob, resumeSyncJob } from "../lib/productSync";
+import { findExistingCarrierService, getCarrierServiceFromDb } from "../lib/carrierService";
 import ConnectionPanel from "../components/admin/ConnectionPanel";
 import RateSettingsPanel from "../components/admin/RateSettings";
 import ShippingCalculatorPanel from "../components/admin/ShippingCalculator";
 import DataTables from "../components/admin/DataTables";
 import LogsPanel from "../components/admin/LogsPanel";
 import type {
-  ConnectionInfo,
+  CarrierServiceInfo,
   RateSettings,
   MappingRow,
   ProductRow,
@@ -202,11 +203,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timestamp: log.createdAt.toLocaleString(),
   }));
 
-  const connection: ConnectionInfo = {
-    connected: false,
-    callbackUrl: process.env.SHOPIFY_APP_URL || "",
-    checkoutCallbackEnabled: false,
-  };
+  let carrierService: CarrierServiceInfo | null = null;
+  try {
+    carrierService = await findExistingCarrierService(session.shop, session.accessToken);
+    if (!carrierService) {
+      const dbService = await getCarrierServiceFromDb(session.shop);
+      if (dbService) {
+        carrierService = {
+          id: dbService.serviceId,
+          name: dbService.serviceName,
+          callbackUrl: dbService.callbackUrl,
+          active: dbService.active,
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching carrier service:", error);
+  }
 
   // Fetch or create shop-specific rate settings
   let settings = await prisma.settings.findUnique({
@@ -226,13 +239,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     carrierCharge: settings.carrierCharge,
   };
 
-  return { mainData, mappingRows, logs, connection, rateSettings, productCount, mappingCount, latestSyncJob };
+  return { mainData, mappingRows, logs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob };
 };
 
 export default function Index() {
-  const { mainData, mappingRows, logs, connection, rateSettings, productCount, mappingCount, latestSyncJob } = useLoaderData<typeof loader>();
+  const { mainData, mappingRows, logs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
-  const [currentConnection, setCurrentConnection] = useState<ConnectionInfo>(connection);
   const [currentRates, setCurrentRates] = useState<RateSettings>(rateSettings);
 
   const showSuccess = searchParams.get("updated") === "true";
@@ -282,14 +294,6 @@ export default function Index() {
     border: "1px solid #e2e8f0",
     boxShadow: "0 1px 4px rgba(15, 23, 42, 0.06)",
     transition: "box-shadow 0.3s ease",
-  };
-
-  const handleToggleConnection = (connected: boolean) => {
-    setCurrentConnection((prev) => ({
-      ...prev,
-      connected,
-      checkoutCallbackEnabled: connected,
-    }));
   };
 
   return (
@@ -386,7 +390,7 @@ export default function Index() {
       )}
 
       <section style={sectionGridStyles}>
-        <ConnectionPanel connection={currentConnection} onToggleConnection={handleToggleConnection} />
+        <ConnectionPanel carrierService={carrierService} />
         <RateSettingsPanel settings={currentRates} />
       </section>
 
