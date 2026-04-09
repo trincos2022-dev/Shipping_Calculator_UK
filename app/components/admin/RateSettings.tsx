@@ -1,4 +1,4 @@
- import { useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { RateSettings } from "./types";
 
 interface Props {

@@ -185,18 +185,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const logs: LogRow[] = [
-    {
-      sku: "SYSTEM",
-      basePrice: "0.00",
-      tax: "0.00",
-      carrierCharge: "0.00",
-      total: "0.00",
-      status: "Info",
-      note: `${mappingCount} products mapped, ${productCount} available in source`,
-      timestamp: new Date().toLocaleString(),
-    },
-  ];
+  const shippingLogs = await prisma.shippingCalculationLog.findMany({
+    where: { shop: session.shop },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const logs: LogRow[] = shippingLogs.map((log) => ({
+    sku: log.sku,
+    basePrice: log.basePrice.toFixed(2),
+    tax: log.taxAmount.toFixed(2),
+    carrierCharge: log.carrierCharge.toFixed(2),
+    total: log.total.toFixed(2),
+    status: log.status === "Success" ? "Done" : "Failed",
+    note: log.error || "Shipping calculated",
+    timestamp: log.createdAt.toLocaleString(),
+  }));
 
   const connection: ConnectionInfo = {
     connected: false,
@@ -230,8 +234,6 @@ export default function Index() {
   const [searchParams] = useSearchParams();
   const [currentConnection, setCurrentConnection] = useState<ConnectionInfo>(connection);
   const [currentRates, setCurrentRates] = useState<RateSettings>(rateSettings);
-  const [currentMapping, setCurrentMapping] = useState<MappingRow[]>(mappingRows);
-  const [logEntries, setLogEntries] = useState<LogRow[]>(logs);
 
   const showSuccess = searchParams.get("updated") === "true";
   const errorMessage = searchParams.get("error");
@@ -288,49 +290,6 @@ export default function Index() {
       connected,
       checkoutCallbackEnabled: connected,
     }));
-
-    setLogEntries((current) => [
-      {
-        sku: "SYSTEM",
-        basePrice: "0.00",
-        tax: "0.00",
-        carrierCharge: "0.00",
-        total: "0.00",
-        status: "Done",
-        note: connected ? "Shopify callback connected" : "Shopify callback disconnected",
-        timestamp: new Date().toLocaleString(),
-      },
-      ...current,
-    ]);
-  };
-
-  const handleManualSync = () => {
-    setCurrentMapping((rows) =>
-      rows.map((row) =>
-        row.status === "Missing"
-          ? row
-          : {
-              ...row,
-              status: "Synced",
-              lastSynced: new Date().toLocaleString(),
-              details: "Manual sync completed",
-            },
-      ),
-    );
-
-    setLogEntries((current) => [
-      {
-        sku: "BULK",
-        basePrice: "0.00",
-        tax: "0.00",
-        carrierCharge: "0.00",
-        total: "0.00",
-        status: "Done",
-        note: "Manual sync completed",
-        timestamp: new Date().toLocaleString(),
-      },
-      ...current,
-    ]);
   };
 
   return (
@@ -438,8 +397,8 @@ export default function Index() {
         />
       </div>
 
-      <DataTables products={mainData} mappingRows={currentMapping} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
-      <LogsPanel logs={logEntries} />
+      <DataTables products={mainData} mappingRows={mappingRows} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
+      <LogsPanel logs={logs} />
     </main>
   );
 }

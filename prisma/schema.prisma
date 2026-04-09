@@ -95,3 +95,21 @@ model ProductSyncJob_UK {
 
   @@map("ProductSyncJob_UK")
 }
+
+model ShippingCalculationLog {
+  id              String   @id @default(cuid())
+  shop            String
+  sku             String
+  basePrice       Float
+  taxAmount       Float
+  carrierCharge   Float
+  total           Float
+  status          String
+  error           String?
+  createdAt       DateTime @default(now())
+
+  @@index([shop], name: "ShippingCalculationLog_shop_idx")
+  @@index([createdAt], name: "ShippingCalculationLog_createdAt_idx")
+
+  @@map("ShippingCalculationLog")
+}
