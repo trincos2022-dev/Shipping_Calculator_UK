@@ -34,7 +34,7 @@ const bodyCellStyles: React.CSSProperties = {
   color: "#334155",
 };
 
-function statusLabel(status: "Done" | "Failed") {
+function statusLabel(status: "Done" | "Failed" | "Info" | "Info") {
   return {
     padding: "6px 10px",
     borderRadius: 999,

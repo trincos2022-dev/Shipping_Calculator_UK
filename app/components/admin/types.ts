@@ -35,3 +35,15 @@ export interface RateSettings {
   taxRate: number;
   carrierCharge: number;
 }
+
+export interface ShippingCalculationResult {
+  success: boolean;
+  sku?: string;
+  title?: string;
+  basePrice?: number;
+  taxPercentage?: number;
+  taxAmount?: number;
+  carrierCharge?: number;
+  total?: number;
+  error?: string;
+}

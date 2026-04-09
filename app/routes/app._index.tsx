@@ -3,9 +3,10 @@ import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSearchParams, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { syncProductsForShop } from "../lib/productSync";
+import { syncProductsForShop, cancelSyncJob, resumeSyncJob } from "../lib/productSync";
 import ConnectionPanel from "../components/admin/ConnectionPanel";
 import RateSettingsPanel from "../components/admin/RateSettings";
+import ShippingCalculatorPanel from "../components/admin/ShippingCalculator";
 import DataTables from "../components/admin/DataTables";
 import LogsPanel from "../components/admin/LogsPanel";
 import type {
@@ -32,6 +33,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (action === "sync-products") {
     try {
+      const existingRunningJob = await prisma.productSyncJob_UK.findFirst({
+        where: { shop: session.shop, status: "running" },
+      });
+
+      if (existingRunningJob) {
+        return redirect("/app?sync-error=" + encodeURIComponent("A sync is already running"));
+      }
+
       const result = await syncProductsForShop(session.shop);
       if (result.success) {
         return redirect("/app?sync-success=true&processed=" + result.processed + "&total=" + result.total);
@@ -40,7 +49,67 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     } catch (error) {
       console.error("Sync action failed:", error);
-      return redirect("/app?sync-error=" + encodeURIComponent("Sync failed"));
+      return redirect("/app?sync-error=" + encodeURIComponent(error instanceof Error ? error.message : "Sync failed"));
+    }
+  }
+
+  if (action === "manual-sync") {
+    try {
+      await prisma.productSyncJob_UK.updateMany({
+        where: { shop: session.shop, status: "running" },
+        data: {
+          status: "cancelled",
+          updatedAt: new Date(),
+        },
+      });
+
+      await prisma.productMapping_UK.deleteMany({
+        where: { shop: session.shop },
+      });
+
+      const result = await syncProductsForShop(session.shop);
+      if (result.success) {
+        return redirect("/app?sync-success=true&processed=" + result.processed + "&total=" + result.total);
+      }
+
+      return redirect("/app?sync-error=" + encodeURIComponent(result.error || "Unknown error"));
+    } catch (error) {
+      console.error("Manual sync action failed:", error);
+      return redirect("/app?sync-error=" + encodeURIComponent(error instanceof Error ? error.message : "Manual sync failed"));
+    }
+  }
+
+  if (action === "cancel-sync") {
+    const jobId = formData.get("jobId");
+    if (!jobId || typeof jobId !== "string") {
+      return redirect("/app?sync-error=" + encodeURIComponent("Missing job id"));
+    }
+
+    try {
+      await cancelSyncJob(jobId);
+      return redirect("/app?sync-cancelled=true");
+    } catch (error) {
+      console.error("Cancel sync action failed:", error);
+      return redirect("/app?sync-error=" + encodeURIComponent(error instanceof Error ? error.message : "Cancel failed"));
+    }
+  }
+
+  if (action === "resume-sync") {
+    const jobId = formData.get("jobId");
+    if (!jobId || typeof jobId !== "string") {
+      return redirect("/app?sync-error=" + encodeURIComponent("Missing job id"));
+    }
+
+    try {
+      const result = await resumeSyncJob(jobId);
+      if (result.success) {
+        return redirect("/app?sync-success=true&processed=" + result.processed + "&total=" + result.total);
+      }
+
+      return redirect("/app?sync-error=" + encodeURIComponent(result.error || "Unknown error"));
+    } catch (error) {
+      console.error("Resume sync action failed:", error);
+      return redirect("/app?sync-error=" + encodeURIComponent(error instanceof Error ? error.message : "Resume failed"));
     }
   }
 
@@ -168,6 +237,7 @@ export default function Index() {
   const errorMessage = searchParams.get("error");
   const syncSuccess = searchParams.get("sync-success") === "true";
   const syncError = searchParams.get("sync-error");
+  const syncCancelled = searchParams.get("sync-cancelled") === "true";
   const processed = searchParams.get("processed");
   const total = searchParams.get("total");
 
@@ -305,6 +375,21 @@ export default function Index() {
         </div>
       )}
 
+      {syncCancelled && (
+        <div style={{
+          marginBottom: 20,
+          padding: 12,
+          borderRadius: 8,
+          backgroundColor: "#fef3c7",
+          border: "1px solid #fde68a",
+          color: "#92400e",
+          fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}>
+          ⚠️ Sync was cancelled. You can resume it from where it stopped.
+        </div>
+      )}
+
       {showSuccess && (
         <div style={{
           marginBottom: 20,
@@ -345,6 +430,13 @@ export default function Index() {
         <ConnectionPanel connection={currentConnection} onToggleConnection={handleToggleConnection} />
         <RateSettingsPanel settings={currentRates} />
       </section>
+
+      <div style={{ marginTop: 20 }}>
+        <ShippingCalculatorPanel 
+          defaultCarrierCharge={currentRates.carrierCharge} 
+          defaultTaxRate={currentRates.taxRate} 
+        />
+      </div>
 
       <DataTables products={mainData} mappingRows={currentMapping} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
       <LogsPanel logs={logEntries} />

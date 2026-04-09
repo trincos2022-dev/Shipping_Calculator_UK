@@ -78,15 +78,16 @@ model shopify_products_final_UK {
 }
 
 model ProductSyncJob_UK {
-  id          String   @id
-  shop        String
-  status      String
-  processed   Int      @default(0)
-  total       Int      @default(0)
-  error       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  finishedAt  DateTime?
+  id              String   @id
+  shop            String
+  status          String
+  processed       Int      @default(0)
+  total           Int      @default(0)
+  cursorSku       String?
+  error           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  finishedAt      DateTime?
 
   @@index([shop], name: "ProductSyncJob_UK_shop_idx")
   @@index([status], name: "ProductSyncJob_UK_status_idx")
