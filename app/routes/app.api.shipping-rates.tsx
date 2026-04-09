@@ -139,16 +139,13 @@ export async function action({ request }: ActionFunctionArgs) {
   const startTime = Date.now();
   const requestBodyStr = await request.text();
   
-  // Try to get shop from header (Shopify passes this)
   let shop = request.headers.get("X-Shopify-Shop-Domain") || "";
   
-  // Also try URL params
   if (!shop) {
     const url = new URL(request.url);
     shop = url.searchParams.get("shop") || "";
   }
   
-  // Fallback to a default if nothing found
   if (!shop) {
     shop = "default";
   }
@@ -184,7 +181,6 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const result = await processRequest(shop, requestBody);
     
-    // Log with full response
     await logRequest(
       shop,
       "incoming",
@@ -210,61 +206,6 @@ export async function action({ request }: ActionFunctionArgs) {
       "/app/api/shipping-rates",
       "POST",
       requestBodyStr ? requestBodyStr.substring(0, 500) : "",
-      JSON.stringify(response),
-      500,
-      errorMessage,
-      Date.now() - startTime
-    );
-
-    return Response.json(response, { status: 500 });
-  }
-}
-  } catch {
-    // Keep as null if parse fails
-  }
-
-  if (!requestBody?.rate) {
-    const response = { rates: [] };
-    await logRequest(
-      shop,
-      "incoming",
-      "/app/api/shipping-rates",
-      "POST",
-      requestBodyStr.substring(0, 500),
-      JSON.stringify(response),
-      400,
-      "Invalid request format - no rate object",
-      Date.now() - startTime
-    );
-    return Response.json(response, { status: 400 });
-  }
-
-  try {
-    const result = await processRequest(shop, requestBody);
-    
-    await logRequest(
-      shop,
-      "incoming",
-      "/app/api/shipping-rates",
-      "POST",
-      JSON.stringify({ items: requestBody.rate.items.map(i => ({ sku: i.sku, quantity: i.quantity })) }),
-      JSON.stringify(result),
-      200,
-      undefined,
-      Date.now() - startTime
-    );
-
-    return Response.json(result);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const response = { rates: [] };
-    
-    await logRequest(
-      shop,
-      "incoming",
-      "/app/api/shipping-rates",
-      "POST",
-      requestBodyStr.substring(0, 500),
       JSON.stringify(response),
       500,
       errorMessage,
