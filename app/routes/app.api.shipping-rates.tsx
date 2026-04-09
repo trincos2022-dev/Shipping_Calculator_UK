@@ -43,10 +43,11 @@ interface ShopifyRateRequest {
 
 interface ShopifyRateResponse {
   rates: Array<{
-    id: string;
     service_name: string;
-    price: string;
+    service_code: string;
+    total_price: string;
     currency: string;
+    description: string;
   }>;
 }
 
@@ -86,7 +87,15 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
 
   if (!settings) {
     await logRequest(shop, "incoming", "/app/api/shipping-rates", "POST", "", JSON.stringify({ error: "No settings" }), 500, "No settings for shop", 0);
-    return { rates: [] };
+    return { 
+      rates: [{
+        service_name: "UK Standard Shipping",
+        service_code: "UK_STD",
+        total_price: "0",
+        currency: "GBP",
+        description: "Configuration required",
+      }] 
+    };
   }
 
   let totalPrice = 0;
@@ -107,10 +116,11 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
   if (!hasItems) {
     return {
       rates: [{
-        id: "uk-shipping-none",
         service_name: "UK Standard Shipping",
-        price: "0.00",
+        service_code: "UK_STD",
+        total_price: "0",
         currency: "GBP",
+        description: "No shipping required for this order",
       }],
     };
   }
@@ -123,10 +133,11 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
 
   const response = {
     rates: [{
-      id: "uk-shipping-standard",
       service_name: "UK Standard Shipping",
-      price: finalTotal.toFixed(2),
+      service_code: "UK_STD",
+      total_price: Math.round(finalTotal * 100).toString(),
       currency: "GBP",
+      description: "Standard delivery within the UK",
     }],
   };
 
@@ -163,7 +174,15 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (!requestBody?.rate) {
-    const response = { rates: [] };
+    const response = { 
+      rates: [{
+        service_name: "UK Standard Shipping",
+        service_code: "UK_STD",
+        total_price: "0",
+        currency: "GBP",
+        description: "Invalid request",
+      }] 
+    };
     await logRequest(
       shop,
       "incoming",
@@ -188,8 +207,8 @@ export async function action({ request }: ActionFunctionArgs) {
       "POST",
       JSON.stringify({ items: requestBody.rate.items.map(i => ({ sku: i.sku, quantity: i.quantity })) }),
       JSON.stringify(result),
-      result.rates.length > 0 ? 200 : 404,
-      result.rates.length === 0 ? "No rates returned" : undefined,
+      result.rates[0]?.total_price !== "0" ? 200 : 404,
+      result.rates[0]?.total_price === "0" ? "No valid rates" : undefined,
       Date.now() - startTime
     );
 
@@ -198,7 +217,15 @@ export async function action({ request }: ActionFunctionArgs) {
     return Response.json(result);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const response = { rates: [] };
+    const response = { 
+      rates: [{
+        service_name: "UK Standard Shipping",
+        service_code: "UK_STD",
+        total_price: "0",
+        currency: "GBP",
+        description: "Error: " + errorMessage,
+      }] 
+    };
     
     await logRequest(
       shop,
@@ -221,7 +248,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") || "default";
 
-  const response = { rates: [] };
+  const response = { 
+    rates: [{
+      service_name: "UK Standard Shipping",
+      service_code: "UK_STD",
+      total_price: "0",
+      currency: "GBP",
+      description: "Use POST method for shipping rates",
+    }] 
+  };
   
   await logRequest(
     shop,
