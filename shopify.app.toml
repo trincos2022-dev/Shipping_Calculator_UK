@@ -2,12 +2,11 @@
 
 client_id = "53d24b6a7945b744f208ccf720993ef9"
 name = "shipping-calculation-UK"
-application_url = "https://example.com"
+application_url = "https://shipping-calculator-uk.vercel.app/"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-07"
@@ -25,7 +24,7 @@ api_version = "2026-07"
 scopes = "write_products,write_metaobjects,write_metaobject_definitions"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://shipping-calculator-uk.vercel.app/api/auth" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
