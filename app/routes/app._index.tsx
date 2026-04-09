@@ -423,13 +423,6 @@ export default function Index() {
         />
       </div>
 
-      <div style={{ marginTop: 20 }}>
-        <ShippingCalculatorPanel 
-          defaultCarrierCharge={currentRates.carrierCharge} 
-          defaultTaxRate={currentRates.taxRate} 
-        />
-      </div>
-
       <RequestLogsPanel logs={requestLogs} />
 
       <DataTables products={mainData} mappingRows={mappingRows} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
