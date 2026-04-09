@@ -75,11 +75,17 @@ async function getProductPrice(shop: string, sku: string): Promise<number | null
 async function processRequest(shop: string, requestBody: ShopifyRateRequest): Promise<ShopifyRateResponse> {
   const items = requestBody.rate?.items || [];
   
+  console.log("Processing request for shop:", shop);
+  console.log("Items received:", items.map(i => ({ sku: i.sku, quantity: i.quantity })));
+  
   const settings = await prisma.settings.findUnique({
     where: { shop },
   });
 
+  console.log("Settings found:", settings);
+
   if (!settings) {
+    await logRequest(shop, "incoming", "/app/api/shipping-rates", "POST", "", JSON.stringify({ error: "No settings" }), 500, "No settings for shop", 0);
     return { rates: [] };
   }
 
@@ -92,8 +98,11 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
     hasItems = true;
     const dbPrice = await getProductPrice(shop, item.sku);
     const price = dbPrice !== null ? dbPrice : Number(item.price) / 100;
+    console.log(`SKU: ${item.sku}, DB Price: ${dbPrice}, Item Price: ${item.price}, Used: ${price}`);
     totalPrice += price * item.quantity;
   }
+
+  console.log("Total price calculated:", totalPrice);
 
   if (!hasItems) {
     return {
@@ -110,7 +119,9 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
   const carrierCharge = settings.carrierCharge;
   const finalTotal = totalPrice + taxAmount + carrierCharge;
 
-  return {
+  console.log("Final calculation:", { totalPrice, taxAmount, carrierCharge, finalTotal });
+
+  const response = {
     rates: [{
       id: "uk-shipping-standard",
       service_name: "UK Standard Shipping",
@@ -118,13 +129,32 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
       currency: "GBP",
     }],
   };
+
+  console.log("Final response:", JSON.stringify(response));
+
+  return response;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const startTime = Date.now();
-  const url = new URL(request.url);
-  const shop = url.searchParams.get("shop") || "default";
   const requestBodyStr = await request.text();
+  
+  // Try to get shop from header (Shopify passes this)
+  let shop = request.headers.get("X-Shopify-Shop-Domain") || "";
+  
+  // Also try URL params
+  if (!shop) {
+    const url = new URL(request.url);
+    shop = url.searchParams.get("shop") || "";
+  }
+  
+  // Fallback to a default if nothing found
+  if (!shop) {
+    shop = "default";
+  }
+  
+  console.log("Shop domain from request:", shop);
+  
   let requestBody: ShopifyRateRequest | null = null;
 
   try {
@@ -142,10 +172,68 @@ export async function action({ request }: ActionFunctionArgs) {
       "incoming",
       "/app/api/shipping-rates",
       "POST",
-      requestBodyStr,
+      requestBodyStr ? requestBodyStr.substring(0, 500) : "",
       JSON.stringify(response),
       400,
-      "Invalid request format",
+      "Invalid request format - no rate object",
+      Date.now() - startTime
+    );
+    return Response.json(response, { status: 400 });
+  }
+
+  try {
+    const result = await processRequest(shop, requestBody);
+    
+    // Log with full response
+    await logRequest(
+      shop,
+      "incoming",
+      "/app/api/shipping-rates",
+      "POST",
+      JSON.stringify({ items: requestBody.rate.items.map(i => ({ sku: i.sku, quantity: i.quantity })) }),
+      JSON.stringify(result),
+      result.rates.length > 0 ? 200 : 404,
+      result.rates.length === 0 ? "No rates returned" : undefined,
+      Date.now() - startTime
+    );
+
+    console.log("Response being sent:", JSON.stringify(result));
+
+    return Response.json(result);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const response = { rates: [] };
+    
+    await logRequest(
+      shop,
+      "incoming",
+      "/app/api/shipping-rates",
+      "POST",
+      requestBodyStr ? requestBodyStr.substring(0, 500) : "",
+      JSON.stringify(response),
+      500,
+      errorMessage,
+      Date.now() - startTime
+    );
+
+    return Response.json(response, { status: 500 });
+  }
+}
+  } catch {
+    // Keep as null if parse fails
+  }
+
+  if (!requestBody?.rate) {
+    const response = { rates: [] };
+    await logRequest(
+      shop,
+      "incoming",
+      "/app/api/shipping-rates",
+      "POST",
+      requestBodyStr.substring(0, 500),
+      JSON.stringify(response),
+      400,
+      "Invalid request format - no rate object",
       Date.now() - startTime
     );
     return Response.json(response, { status: 400 });
@@ -176,7 +264,7 @@ export async function action({ request }: ActionFunctionArgs) {
       "incoming",
       "/app/api/shipping-rates",
       "POST",
-      requestBodyStr,
+      requestBodyStr.substring(0, 500),
       JSON.stringify(response),
       500,
       errorMessage,
