@@ -23,34 +23,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const formData = await request.formData();
     const taxRateInput = formData.get("taxRate");
     const carrierChargeInput = formData.get("carrierCharge");
+    const usdToGbpRateInput = formData.get("usdToGbpRate");
 
     // Validate inputs
-    if (!taxRateInput || !carrierChargeInput) {
-      console.error("Missing form fields:", { taxRateInput, carrierChargeInput });
+    if (!taxRateInput || !carrierChargeInput || !usdToGbpRateInput) {
+      console.error("Missing form fields:", { taxRateInput, carrierChargeInput, usdToGbpRateInput });
       return redirect("/app?error=missing-fields");
     }
 
     const taxRate = parseFloat(taxRateInput as string);
     const carrierCharge = parseFloat(carrierChargeInput as string);
+    const usdToGbpRate = parseFloat(usdToGbpRateInput as string);
 
     // Validate parsed values
-    if (isNaN(taxRate) || isNaN(carrierCharge)) {
-      console.error("Invalid number values:", { taxRate, carrierCharge });
+    if (isNaN(taxRate) || isNaN(carrierCharge) || isNaN(usdToGbpRate)) {
+      console.error("Invalid number values:", { taxRate, carrierCharge, usdToGbpRate });
       return redirect("/app?error=invalid-values");
     }
 
-    console.log("Updating settings for shop:", session.shop, { taxRate, carrierCharge });
+    console.log("Updating settings for shop:", session.shop, { taxRate, carrierCharge, usdToGbpRate });
 
     const result = await prisma.settings.upsert({
       where: { shop: session.shop },
       update: {
         taxPercentage: taxRate,
         carrierCharge: carrierCharge,
+        usdToGbpRate: usdToGbpRate,
       },
       create: {
         shop: session.shop,
         taxPercentage: taxRate,
         carrierCharge: carrierCharge,
+        usdToGbpRate: usdToGbpRate,
       },
     });
 

@@ -51,6 +51,20 @@ interface ShopifyRateResponse {
   }>;
 }
 
+// Fetch live USD to GBP exchange rate
+async function getUsdToGbpRate(): Promise<number> {
+  try {
+    const response = await fetch("https://api.frankfurter.app/latest?from=USD&to=GBP");
+    if (response.ok) {
+      const data = await response.json();
+      return data.rates?.GBP || 0.79;
+    }
+  } catch (error) {
+    console.error("Failed to fetch exchange rate:", error);
+  }
+  return 0.79; // Fallback rate
+}
+
 async function getProductPrice(shop: string, sku: string): Promise<number | null> {
   const mapping = await prisma.productMapping_UK.findFirst({
     where: { shop, sku },
@@ -98,7 +112,11 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
     };
   }
 
-  let totalPrice = 0;
+  // Get live exchange rate
+  const exchangeRate = await getUsdToGbpRate();
+  console.log("Exchange rate (USD to GBP):", exchangeRate);
+
+  let totalPriceGbp = 0;
   let hasItems = false;
 
   for (const item of items) {
@@ -106,12 +124,22 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
     
     hasItems = true;
     const dbPrice = await getProductPrice(shop, item.sku);
-    const price = dbPrice !== null ? dbPrice : Number(item.price) / 100;
-    console.log(`SKU: ${item.sku}, DB Price: ${dbPrice}, Item Price: ${item.price}, Used: ${price}`);
-    totalPrice += price * item.quantity;
+    let priceGbp: number;
+    
+    if (dbPrice !== null) {
+      // DB price is already in GBP
+      priceGbp = dbPrice;
+    } else {
+      // Shopify price is in USD pennies - convert to GBP
+      const priceUsd = Number(item.price) / 100;
+      priceGbp = priceUsd * exchangeRate;
+    }
+    
+    console.log(`SKU: ${item.sku}, Price (GBP): ${priceGbp}, Qty: ${item.quantity}`);
+    totalPriceGbp += priceGbp * item.quantity;
   }
 
-  console.log("Total price calculated:", totalPrice);
+  console.log("Total price (GBP) calculated:", totalPriceGbp);
 
   if (!hasItems) {
     return {
@@ -127,11 +155,11 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
 
   // Calculate only shipping costs: tax on items + carrier charge
   // Note: basePrice is not included - Shopify adds that separately
-  const taxAmount = totalPrice * (settings.taxPercentage / 100);
+  const taxAmount = totalPriceGbp * (settings.taxPercentage / 100);
   const carrierCharge = settings.carrierCharge;
   const shippingCost = taxAmount + carrierCharge;
 
-  console.log("Final calculation:", { totalPrice, taxAmount, carrierCharge, shippingCost });
+  console.log("Final calculation:", { totalPriceGbp, taxAmount, carrierCharge, shippingCost });
 
   const response = {
     rates: [{

@@ -21,6 +21,13 @@ const fieldGroupStyles: React.CSSProperties = {
   marginBottom: 16,
 };
 
+const fieldGroupStylesFull: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1fr",
+  gap: 16,
+  marginBottom: 16,
+};
+
 const fieldStyles: React.CSSProperties = {
   display: "block",
   fontWeight: 600,
@@ -61,7 +68,7 @@ export default function RateSettingsPanel({ settings }: Props) {
       </p>
 
       <form method="post" onSubmit={handleSubmit}>
-        <div style={fieldGroupStyles}>
+        <div style={fieldGroupStylesFull}>
           <label style={fieldStyles}>
             Tax rate (%)
             <input
@@ -84,6 +91,20 @@ export default function RateSettingsPanel({ settings }: Props) {
               min="0"
               step="0.5"
               defaultValue={settings.carrierCharge}
+              style={inputStyles}
+              required
+            />
+          </label>
+
+          <label style={fieldStyles}>
+            USD to GBP rate
+            <input
+              type="number"
+              name="usdToGbpRate"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              defaultValue={settings.usdToGbpRate}
               style={inputStyles}
               required
             />
@@ -114,6 +135,7 @@ export default function RateSettingsPanel({ settings }: Props) {
         <strong>Current values:</strong>
         <div>Tax rate: {settings.taxRate}%</div>
         <div>Carrier charge: £{settings.carrierCharge}</div>
+        <div>USD to GBP rate: {settings.usdToGbpRate}</div>
       </div>
     </section>
   );
