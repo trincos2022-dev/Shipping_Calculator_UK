@@ -85,7 +85,7 @@ model shopify_products_final_UK {
 
 model ProductSyncJob_UK {
   id         String    @id
-  shopDomain String
+  shop       String
   status     String
   processed  Int       @default(0)
   total      Int       @default(0)
@@ -97,7 +97,7 @@ model ProductSyncJob_UK {
 
   @@index([status])
   @@index([createdAt])
-  @@index([shopDomain])
+  @@index([shop])
   @@map("ProductSyncJob_UK")
   @@schema("public")
 }
