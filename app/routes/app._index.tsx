@@ -188,7 +188,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const shippingLogs = await prisma.shippingCalculationLog.findMany({
+  const shippingLogs = await prisma.shippingCalculationLog_UK.findMany({
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -205,7 +205,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timestamp: log.createdAt.toLocaleString(),
   }));
 
-  const requestLogsRaw = await prisma.requestLog.findMany({
+  const requestLogsRaw = await prisma.requestLog_UK.findMany({
     where: { shop: session.shop },
     orderBy: { createdAt: "desc" },
     take: 10,
@@ -244,21 +244,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Fetch or create shop-specific rate settings
-  let settings = await prisma.settings.findUnique({
+  let settings = await prisma.settings_UK.findUnique({
     where: { shop: session.shop },
   });
   if (!settings) {
-    settings = await prisma.settings.create({
+    settings = await prisma.settings_UK.create({
       data: {
         shop: session.shop,
         taxPercentage: 20,
         carrierCharge: 5,
+        usdToGbpRate: 0.79,
       },
     });
   }
   const rateSettings: RateSettings = {
     taxRate: settings.taxPercentage,
     carrierCharge: settings.carrierCharge,
+    usdToGbpRate: settings.usdToGbpRate,
   };
 
   return { mainData, mappingRows, logs, requestLogs, carrierService, rateSettings, productCount, mappingCount, latestSyncJob };

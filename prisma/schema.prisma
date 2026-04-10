@@ -8,12 +8,12 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Settings {
+model Settings_UK {
   id              String   @id @default(cuid())
   shop            String   @unique
   taxPercentage   Float
   carrierCharge   Float
-  usdToGbpRate    Float    @default(0.79)  // Default exchange rate
+  usdToGbpRate    Float    @default(0.79)
   updatedAt       DateTime @updatedAt
 
   @@index([shop])
@@ -97,7 +97,7 @@ model ProductSyncJob_UK {
   @@map("ProductSyncJob_UK")
 }
 
-model ShippingCalculationLog {
+model ShippingCalculationLog_UK {
   id              String   @id @default(cuid())
   shop            String
   sku             String
@@ -129,7 +129,7 @@ model CarrierService {
   @@map("CarrierService")
 }
 
-model RequestLog {
+model RequestLog_UK {
   id          String   @id @default(cuid())
   shop        String
   type        String   // "incoming" or "outgoing"
@@ -144,5 +144,5 @@ model RequestLog {
 
   @@index([shop])
   @@index([createdAt])
-  @@map("RequestLog")
+  @@map("RequestLog_UK")
 }

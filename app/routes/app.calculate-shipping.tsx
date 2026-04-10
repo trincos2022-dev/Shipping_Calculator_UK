@@ -24,7 +24,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const result = await calculateShippingForSku(sku.trim(), session.shop);
 
   if (result.success) {
-    await prisma.shippingCalculationLog.create({
+    await prisma.shippingCalculationLog_UK.create({
       data: {
         shop: session.shop,
         sku: result.sku || sku.trim(),
@@ -36,7 +36,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       },
     });
   } else {
-    await prisma.shippingCalculationLog.create({
+    await prisma.shippingCalculationLog_UK.create({
       data: {
         shop: session.shop,
         sku: sku.trim(),

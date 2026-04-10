@@ -43,7 +43,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     console.log("Updating settings for shop:", session.shop, { taxRate, carrierCharge, usdToGbpRate });
 
-    const result = await prisma.settings.upsert({
+    const result = await prisma.settings_UK.upsert({
       where: { shop: session.shop },
       update: {
         taxPercentage: taxRate,
