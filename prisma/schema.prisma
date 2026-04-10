@@ -1173,7 +1173,7 @@ model Session_im {
 }
 
 model ShippingCalculationLog_UK {
-  id            String   @id(map: "shippingcalculationlog_pkey")
+  id            String   @id @default(cuid()) @db.Uuid
   shop          String
   sku           String
   basePrice     Float
