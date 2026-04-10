@@ -51,6 +51,7 @@ model ProductMapping_UK {
   ingramPartNumber String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
+  price            Decimal? @db.Decimal
 
   @@unique([shop, sku], map: "ProductMapping_UK_shopDomain_sku_idx")
   @@index([shop], map: "ProductMapping_UK_shopDomain_idx")
