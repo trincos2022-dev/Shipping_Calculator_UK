@@ -51,6 +51,41 @@ interface ShopifyRateResponse {
   }>;
 }
 
+
+const TAX_ONLY_PRODUCT_TYPES = [
+  "Security Software",
+  "Manufacturing Equipment Repair Services",
+  "Document Management Software",
+  "Video Surveillance Software",
+  "Software Licenses/Upgrades",
+  "IT Infrastructure Software",
+  "IT Courses",
+  "Business Management Software",
+  "Barcode & Labelling Software",
+  "Warranty & Support",
+  "Networking Software",
+  "Warranty & Support Extensions",
+  "IT Support Services",
+  "Communication Software",
+  "Multimedia Software",
+  "PC Utilities Software",
+  "Data Storage Services",
+  "Installation Services",
+  "Operating Systems",
+  "Servers",
+  "Cloud Solutions"
+];
+
+function isTaxOnly(productType?: string | null): boolean {
+  return productType
+    ? TAX_ONLY_PRODUCT_TYPES.some(
+        (type) =>
+          type.toLowerCase().trim() === productType.toLowerCase().trim()
+      )
+    : false;
+}
+
+
 // Fetch live USD to GBP exchange rate
 async function getUsdToGbpRate(): Promise<number> {
   try {
@@ -65,26 +100,33 @@ async function getUsdToGbpRate(): Promise<number> {
   return 0.79; // Fallback rate
 }
 
-async function getProductPrice(shop: string, sku: string): Promise<number | null> {
+async function getProduct(shop: string, sku: string): Promise<{ price: number | null; productType: string | null }> {
+  let productType: string | null = null;
+  let price: number | null = null;
+
   const mapping = await prisma.productMapping_UK.findFirst({
     where: { shop, sku },
     select: { price: true },
   });
 
-  if (mapping) {
-    return Number(mapping.price);
+  if (mapping?.price) {
+    price = Number(mapping.price);
   }
 
+  // Always fetch product_type from shopify_products_final_UK as it's the source of truth
   const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
     where: { sku },
-    select: { price: true },
+    select: { price: true, product_type: true },
   });
 
-  if (sourceProduct?.price) {
-    return Number(sourceProduct.price);
+  if (sourceProduct) {
+    productType = sourceProduct.product_type ?? null;
+    if (price === null && sourceProduct.price) {
+      price = Number(sourceProduct.price);
+    }
   }
 
-  return null;
+  return { price, productType };
 }
 
 async function processRequest(shop: string, requestBody: ShopifyRateRequest): Promise<ShopifyRateResponse> {
@@ -101,14 +143,14 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
 
   if (!settings) {
     await logRequest(shop, "incoming", "/app/api/shipping-rates", "POST", "", JSON.stringify({ error: "No settings" }), 500, "No settings for shop", 0);
-    return { 
+    return {
       rates: [{
         service_name: "UK Standard Shipping",
         service_code: "UK_STD",
         total_price: "0",
         currency: "GBP",
         description: "Configuration required",
-      }] 
+      }],
     };
   }
 
@@ -118,14 +160,20 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
 
   let totalPriceGbp = 0;
   let hasItems = false;
+  let allItemsTaxOnly = true;
 
   for (const item of items) {
     if (!item.requires_shipping) continue;
-    
+
     hasItems = true;
-    const dbPrice = await getProductPrice(shop, item.sku);
+    const { price: dbPrice, productType } = await getProduct(shop, item.sku);
+
+    if (!isTaxOnly(productType)) {
+      allItemsTaxOnly = false;
+    }
+
     let priceGbp: number;
-    
+
     if (dbPrice !== null) {
       // DB price is already in GBP
       priceGbp = dbPrice;
@@ -134,8 +182,8 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
       const priceUsd = Number(item.price) / 100;
       priceGbp = priceUsd * exchangeRate;
     }
-    
-    console.log(`SKU: ${item.sku}, Price (GBP): ${priceGbp}, Qty: ${item.quantity}`);
+
+console.log(`SKU: ${item.sku}, Price (GBP): ${priceGbp}, Qty: ${item.quantity}, productType: ${productType}`);
     totalPriceGbp += priceGbp * item.quantity;
   }
 
@@ -156,10 +204,10 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
   // Calculate only shipping costs: tax on items + carrier charge
   // Note: basePrice is not included - Shopify adds that separately
   const taxAmount = totalPriceGbp * (settings.taxPercentage / 100);
-  const carrierCharge = settings.carrierCharge;
+  const carrierCharge = allItemsTaxOnly ? 0 : settings.carrierCharge;
   const shippingCost = taxAmount + carrierCharge;
 
-  console.log("Final calculation:", { totalPriceGbp, taxAmount, carrierCharge, shippingCost });
+  console.log("Final calculation:", { totalPriceGbp, taxAmount, carrierCharge, shippingCost, allItemsTaxOnly });
 
   const response = {
     rates: [{

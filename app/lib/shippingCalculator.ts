@@ -61,20 +61,25 @@ export async function calculateShippingForSku(
       };
     }
 
-    // 1️⃣ Try mapped product first
+    // 1️⃣ Try mapped product first for price
     const product = await prisma.productMapping_UK.findFirst({
       where: { shop, sku },
       select: {
         sku: true,
         price: true,
-        product_type: true,
       },
     });
 
     if (product && product.price) {
       const basePrice = Number(product.price);
       const taxAmount = basePrice * (settings.taxPercentage / 100);
-      const taxOnly = isTaxOnly(product.product_type);
+
+      // Check tax-only status from source product
+      const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
+        where: { sku },
+        select: { product_type: true },
+      });
+      const taxOnly = isTaxOnly(sourceProduct?.product_type);
 
       const total = taxOnly
         ? basePrice + taxAmount
