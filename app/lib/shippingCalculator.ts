@@ -12,6 +12,39 @@ export interface ShippingCalculationResult {
   error?: string;
 }
 
+const TAX_ONLY_PRODUCT_TYPES = [
+  "Security Software",
+  "Manufacturing Equipment Repair Services",
+  "Document Management Software",
+  "Video Surveillance Software",
+  "Software Licenses/Upgrades",
+  "IT Infrastructure Software",
+  "IT Courses",
+  "Business Management Software",
+  "Barcode & Labelling Software",
+  "Warranty & Support",
+  "Networking Software",
+  "Warranty & Support Extensions",
+  "IT Support Services",
+  "Communication Software",
+  "Multimedia Software",
+  "PC Utilities Software",
+  "Data Storage Services",
+  "Installation Services",
+  "Operating Systems",
+  "Servers",
+  "Cloud Solutions"
+];
+
+function isTaxOnly(productType?: string | null): boolean {
+  return productType
+    ? TAX_ONLY_PRODUCT_TYPES.some(
+        (type) =>
+          type.toLowerCase().trim() === productType.toLowerCase().trim()
+      )
+    : false;
+}
+
 export async function calculateShippingForSku(
   sku: string,
   shop: string
@@ -28,65 +61,75 @@ export async function calculateShippingForSku(
       };
     }
 
+    // 1️⃣ Try mapped product first
     const product = await prisma.productMapping_UK.findFirst({
-      where: {
-        shop,
-        sku,
-      },
+      where: { shop, sku },
       select: {
         sku: true,
         price: true,
+        product_type: true,
       },
     });
 
-    if (!product) {
-      const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
-        where: { sku },
-        select: {
-          sku: true,
-          title: true,
-          price: true,
-        },
-      });
-
-      if (!sourceProduct || !sourceProduct.price) {
-        return {
-          success: false,
-          error: "Product not found",
-        };
-      }
-
-      const basePrice = Number(sourceProduct.price);
+    if (product && product.price) {
+      const basePrice = Number(product.price);
       const taxAmount = basePrice * (settings.taxPercentage / 100);
-      const total = basePrice + taxAmount + settings.carrierCharge;
+      const taxOnly = isTaxOnly(product.product_type);
+
+      const total = taxOnly
+        ? basePrice + taxAmount
+        : basePrice + taxAmount + settings.carrierCharge;
 
       return {
         success: true,
-        sku: sourceProduct.sku || undefined,
-        title: sourceProduct.title || undefined,
+        sku: product.sku || undefined,
         basePrice,
         taxPercentage: settings.taxPercentage,
         taxAmount: Math.round(taxAmount * 100) / 100,
-        carrierCharge: settings.carrierCharge,
+        carrierCharge: taxOnly ? 0 : settings.carrierCharge,
         total: Math.round(total * 100) / 100,
       };
     }
 
-    const basePrice = Number(product.price);
+    // 2️⃣ Fallback to Shopify product
+    const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
+      where: { sku },
+      select: {
+        sku: true,
+        title: true,
+        price: true,
+        product_type: true,
+      },
+    });
+
+    if (!sourceProduct || !sourceProduct.price) {
+      return {
+        success: false,
+        error: "Product not found",
+      };
+    }
+
+    const basePrice = Number(sourceProduct.price);
     const taxAmount = basePrice * (settings.taxPercentage / 100);
-    const total = basePrice + taxAmount + settings.carrierCharge;
+    const taxOnly = isTaxOnly(sourceProduct.product_type);
+
+    const total = taxOnly
+      ? basePrice + taxAmount
+      : basePrice + taxAmount + settings.carrierCharge;
 
     return {
       success: true,
-      sku: product.sku || undefined,
+      sku: sourceProduct.sku || undefined,
+      title: sourceProduct.title || undefined,
       basePrice,
       taxPercentage: settings.taxPercentage,
       taxAmount: Math.round(taxAmount * 100) / 100,
-      carrierCharge: settings.carrierCharge,
+      carrierCharge: taxOnly ? 0 : settings.carrierCharge,
       total: Math.round(total * 100) / 100,
     };
   } catch (error) {
     console.error("Shipping calculation error:", error);
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Calculation failed",
