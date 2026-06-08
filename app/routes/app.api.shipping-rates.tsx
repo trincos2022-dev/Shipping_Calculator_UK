@@ -156,8 +156,10 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
   }
 
   // Get live exchange rate
-  const exchangeRate = await getUsdToGbpRate();
+  let exchangeRate = await getUsdToGbpRate();
   console.log("Exchange rate (USD to GBP):", exchangeRate);
+  exchangeRate = exchangeRate * 1.015; // Add 1.5% buffer to account for fluctuations and fees
+  console.log("Adjusted exchange rate with buffer:", exchangeRate);
 
   let totalPriceGbp = 0;
   let hasItems = false;
