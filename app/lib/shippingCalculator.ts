@@ -88,11 +88,11 @@ export async function calculateShippingForSku(
       return {
         success: true,
         sku: product.sku || undefined,
-        basePrice,
+        basePrice: Number(basePrice.toFixed(2)),
         taxPercentage: settings.taxPercentage,
-        taxAmount: Math.round(taxAmount * 100) / 100,
-        carrierCharge: taxOnly ? 0 : settings.carrierCharge,
-        total: Math.round(total * 100) / 100,
+        taxAmount: Number(taxAmount.toFixed(2)),
+        carrierCharge: taxOnly ? 0 : Number(settings.carrierCharge.toFixed(2)),
+        total: Number(total.toFixed(2)),
       };
     }
 
@@ -126,11 +126,11 @@ export async function calculateShippingForSku(
       success: true,
       sku: sourceProduct.sku || undefined,
       title: sourceProduct.title || undefined,
-      basePrice,
+      basePrice: Number(basePrice.toFixed(2)),
       taxPercentage: settings.taxPercentage,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      carrierCharge: taxOnly ? 0 : settings.carrierCharge,
-      total: Math.round(total * 100) / 100,
+      taxAmount: Number(taxAmount.toFixed(2)),
+      carrierCharge: taxOnly ? 0 : Number(settings.carrierCharge.toFixed(2)),
+      total: Number(total.toFixed(2)),
     };
   } catch (error) {
     console.error("Shipping calculation error:", error);

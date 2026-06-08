@@ -181,6 +181,7 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
       // Shopify price is in USD pennies - convert to GBP
       const priceUsd = Number(item.price) / 100;
       priceGbp = priceUsd * exchangeRate;
+      console.log(`Price for SKU ${item.sku} not found in DB, converted from USD ${priceUsd} to GBP ${priceGbp}`);
     }
 
 console.log(`SKU: ${item.sku}, Price (GBP): ${priceGbp}, Qty: ${item.quantity}, productType: ${productType}`);
