@@ -9,13 +9,12 @@ export interface SyncResult {
   error?: string;
 }
 
-// ✅ tuning knobs
+// ✅ tuning knob
 const BATCH_SIZE = 100;
-const PROGRESS_UPDATE_INTERVAL = 50;
 
 export async function syncProductsForShop(
   shop: string,
-  resumeJobId?: string
+  resumeJobId?: string,
 ): Promise<SyncResult> {
   let jobId = resumeJobId ?? "";
   let processed = 0;
@@ -33,12 +32,14 @@ export async function syncProductsForShop(
         throw new Error("Sync job not found for this shop");
       }
 
+      // ✅ already completed → return
       if (existingJob.status === "completed") {
-        throw new Error("Cannot resume a completed sync job");
-      }
-
-      if (existingJob.status === "running") {
-        throw new Error("Sync job is already running");
+        return {
+          success: true,
+          jobId: existingJob.id,
+          processed: existingJob.processed,
+          total: existingJob.total,
+        };
       }
 
       total = existingJob.total;
@@ -49,13 +50,13 @@ export async function syncProductsForShop(
         where: { id: resumeJobId },
         data: {
           status: "running",
-          error: null,
           updatedAt: new Date(),
         },
       });
 
       jobId = resumeJobId;
-    } 
+    }
+
     // ✅ CREATE NEW JOB
     else {
       total = await prisma.shopify_products_final_UK.count({
@@ -84,124 +85,99 @@ export async function syncProductsForShop(
       });
     }
 
-    let hasMore = true;
-
-    while (hasMore) {
-      // ✅ FETCH NEXT BATCH USING CURSOR
-      const products = await prisma.shopify_products_final_UK.findMany({
-        where: {
-          sku: { not: null },
-          price: { not: null },
-          part_number: { not: null },
-          ...(cursorSku && { sku: { gt: cursorSku } }),
-        },
-        select: {
-          sku: true,
-          price: true,
-          part_number: true,
-        },
-        orderBy: { sku: "asc" },
-        take: BATCH_SIZE,
-      });
-
-      if (products.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      for (const product of products) {
-        try {
-          if (!product.sku || product.price === null || !product.part_number) {
-            continue;
-          }
-
-          // ✅ UPSERT (main work)
-          await prisma.productMapping_UK.upsert({
-            where: {
-              shop_sku: {
-                shop,
-                sku: product.sku,
-              },
-            },
-            update: {
-              price: product.price,
-              ingramPartNumber: product.part_number,
-            },
-            create: {
-              shop,
-              sku: product.sku,
-              price: product.price,
-              ingramPartNumber: product.part_number,
-            },
-          });
-
-          processed++;
-          cursorSku = product.sku;
-
-          // ✅ PERIODIC STATUS CHECK + UPDATE
-          if (processed % PROGRESS_UPDATE_INTERVAL === 0) {
-            const job = await prisma.productSyncJob_UK.findUnique({
-              where: { id: jobId },
-              select: { status: true },
-            });
-
-            if (!job) {
-              throw new Error("Sync job disappeared during processing");
-            }
-
-            if (job.status === "cancelled") {
-              return {
-                success: false,
-                jobId,
-                processed,
-                total,
-                error: "Sync cancelled",
-              };
-            }
-
-            await prisma.productSyncJob_UK.update({
-              where: { id: jobId },
-              data: {
-                processed,
-                cursorSku,
-                updatedAt: new Date(),
-              },
-            });
-          }
-        } catch (productError) {
-          console.error(`Failed to sync product ${product.sku}:`, productError);
-        }
-      }
-    }
-
-    // ✅ FINAL STATUS CHECK
-    const finalJob = await prisma.productSyncJob_UK.findUnique({
-      where: { id: jobId },
-      select: { status: true },
+    // ✅ FETCH ONLY ONE BATCH (KEY CHANGE FOR VERCEL)
+    const products = await prisma.shopify_products_final_UK.findMany({
+      where: {
+        sku: { not: null },
+        price: { not: null },
+        part_number: { not: null },
+        ...(cursorSku && { sku: { gt: cursorSku } }),
+      },
+      select: {
+        sku: true,
+        price: true,
+        part_number: true,
+      },
+      orderBy: { sku: "asc" },
+      take: BATCH_SIZE,
     });
 
-    if (!finalJob) {
-      throw new Error("Sync job disappeared before completion");
-    }
+    // ✅ NO MORE DATA → COMPLETE JOB
+    if (products.length === 0) {
+      const job = await prisma.productSyncJob_UK.findUnique({
+        where: { id: jobId },
+        select: { status: true },
+      });
 
-    if (finalJob.status === "cancelled") {
+      if (job?.status === "cancelled") {
+        return {
+          success: false,
+          jobId,
+          processed,
+          total,
+          error: "Sync cancelled",
+        };
+      }
+
+      await prisma.productSyncJob_UK.update({
+        where: { id: jobId },
+        data: {
+          status: "completed",
+          processed,
+          cursorSku,
+          finishedAt: new Date(),
+        },
+      });
+
       return {
-        success: false,
+        success: true,
         jobId,
         processed,
         total,
-        error: "Sync cancelled",
       };
     }
 
-    // ✅ MARK COMPLETED
+    // ✅ PROCESS ONE BATCH ONLY
+    for (const product of products) {
+      try {
+        if (!product.sku || product.price === null || !product.part_number) {
+          continue;
+        }
+
+        await prisma.productMapping_UK.upsert({
+          where: {
+            shop_sku: {
+              shop,
+              sku: product.sku,
+            },
+          },
+          update: {
+            price: product.price,
+            ingramPartNumber: product.part_number,
+          },
+          create: {
+            shop,
+            sku: product.sku,
+            price: product.price,
+            ingramPartNumber: product.part_number,
+          },
+        });
+
+        processed++;
+        cursorSku = product.sku;
+
+      } catch (productError) {
+        console.error(`Failed to sync product ${product.sku}:`, productError);
+      }
+    }
+
+    // ✅ SAVE PROGRESS (CRUCIAL FOR CRON RESUME)
     await prisma.productSyncJob_UK.update({
       where: { id: jobId },
       data: {
-        status: "completed",
         processed,
         cursorSku,
-        finishedAt: new Date(),
+        updatedAt: new Date(),
       },
     });
 
@@ -211,6 +187,7 @@ export async function syncProductsForShop(
       processed,
       total,
     };
+
   } catch (error) {
     console.error("Product sync failed:", error);
 
@@ -239,7 +216,7 @@ export async function syncProductsForShop(
   }
 }
 
-// ✅ CANCEL
+// ✅ CANCEL (unchanged)
 export async function cancelSyncJob(jobId: string) {
   const job = await prisma.productSyncJob_UK.findUnique({
     where: { id: jobId },
@@ -262,7 +239,7 @@ export async function cancelSyncJob(jobId: string) {
   });
 }
 
-// ✅ RESUME
+// ✅ RESUME (works perfectly with batch model)
 export async function resumeSyncJob(jobId: string): Promise<SyncResult> {
   const job = await prisma.productSyncJob_UK.findUnique({
     where: { id: jobId },
@@ -279,7 +256,7 @@ export async function resumeSyncJob(jobId: string): Promise<SyncResult> {
   return syncProductsForShop(job.shop, jobId);
 }
 
-// ✅ STATUS
+// ✅ STATUS (unchanged)
 export async function getSyncJobStatus(jobId: string) {
   return prisma.productSyncJob_UK.findUnique({
     where: { id: jobId },
