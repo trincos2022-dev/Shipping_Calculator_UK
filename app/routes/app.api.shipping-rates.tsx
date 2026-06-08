@@ -133,6 +133,7 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
   const items = requestBody.rate?.items || [];
   
   console.log("Processing request for shop:", shop);
+  console.log(items)
   console.log("Items received:", items.map(i => ({ sku: i.sku, quantity: i.quantity })));
   
   const settings = await prisma.settings_UK.findUnique({
