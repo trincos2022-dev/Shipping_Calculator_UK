@@ -217,7 +217,7 @@ console.log(`SKU: ${item.sku}, Price (GBP): ${priceGbp}, Qty: ${item.quantity}, 
     rates: [{
       service_name: "UK Standard Shipping",
       service_code: "UK_STD",
-      total_price: Math.ceil(shippingCost * 100).toString(),
+      total_price: Math.round(shippingCost * 100).toString(),
       currency: "GBP",
       description: "Standard delivery within the UK",
     }],

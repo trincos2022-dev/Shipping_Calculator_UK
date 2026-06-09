@@ -118,7 +118,7 @@ export default function DataTables({ products, mappingRows, productCount, mappin
         </div>
         <div>
           <div style={statLabelStyles}>Last sync</div>
-          <div style={statValueStyles}>{lastSynced ? new Date(lastSynced).toLocaleString() : "Not synced yet"}</div>
+          <div style={statValueStyles}>{lastSynced ? new Date(lastSynced).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "Not synced yet"}</div>
         </div>
       </div>
 
@@ -152,8 +152,8 @@ export default function DataTables({ products, mappingRows, productCount, mappin
           </div>
           <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
             <div>
-              <div>Started: {new Date(latestSyncJob.createdAt).toLocaleString()}</div>
-              {latestSyncJob.finishedAt ? <div>Finished: {new Date(latestSyncJob.finishedAt).toLocaleString()}</div> : null}
+              <div>Started: {new Date(latestSyncJob.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
+              {latestSyncJob.finishedAt ? <div>Finished: {new Date(latestSyncJob.finishedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div> : null}
               {latestSyncJob.error ? <div style={{ color: "#b91c1c", marginTop: 6 }}>Error: {latestSyncJob.error}</div> : null}
             </div>
             <fetcher.Form method="post" style={{ marginLeft: "auto" }}>
@@ -168,7 +168,6 @@ export default function DataTables({ products, mappingRows, productCount, mappin
               </button>
             </fetcher.Form>
           </div>
-          {latestSyncJob.finishedAt ? <div>Finished: {new Date(latestSyncJob.finishedAt).toLocaleString()}</div> : null}
           {latestSyncJob.error ? <div style={{ color: "#b91c1c" }}>Error: {latestSyncJob.error}</div> : null}
         </div>
       ) : (
