@@ -43,6 +43,23 @@ export async function syncProductsForShop(
       }
 
       total = existingJob.total;
+
+      if (!total || total === 0) {
+        total = await prisma.shopify_products_final_UK.count({
+          where: {
+            sku: { not: null },
+            price: { not: null },
+            part_number: { not: null },
+          },
+        });
+
+        await prisma.productSyncJob_UK.update({
+          where: { id: resumeJobId },
+          data: {
+            total,  // ✅ FIX: set total if missing
+          },
+        });
+      }
       processed = existingJob.processed;
       cursorSku = existingJob.cursorSku ?? null;
 
@@ -177,6 +194,7 @@ export async function syncProductsForShop(
       data: {
         processed,
         cursorSku,
+        total,
         updatedAt: new Date(),
       },
     });

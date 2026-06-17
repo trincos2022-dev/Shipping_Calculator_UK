@@ -58,11 +58,10 @@ export default function DataTables({ products, mappingRows, productCount, mappin
   const isResuming = currentAction === "resume-sync" && fetcher.state === "submitting";
   const isManualSync = currentAction === "manual-sync" && fetcher.state === "submitting";
 
-  const lastSynced = mappingRows.length > 0 ?
-    mappingRows.reduce((latest, row) => {
-      const rowTime = new Date(row.lastSynced).getTime();
-      return rowTime > latest ? rowTime : latest;
-    }, 0) : null;
+const lastSynced =
+  latestSyncJob?.finishedAt ||
+  latestSyncJob?.updatedAt ||
+  null;
 
   const jobButtonLabel = latestSyncJob?.status === "running"
     ? isCancelling ? "Cancelling..." : "Cancel sync"
@@ -79,9 +78,14 @@ export default function DataTables({ products, mappingRows, productCount, mappin
   const manualButtonLabel = isManualSync ? "Manual syncing..." : "Manual Sync";
   const buttonDisabled = isSyncing || isCancelling || isResuming || isManualSync;
 
-  const progressPercent = latestSyncJob && latestSyncJob.total > 0
-    ? Math.round((latestSyncJob.processed / latestSyncJob.total) * 100)
-    : 0;
+const safeTotal =
+  latestSyncJob?.total && latestSyncJob.total > 0
+    ? latestSyncJob.total
+    : productCount;
+
+const progressPercent = latestSyncJob
+  ? Math.round((latestSyncJob.processed / safeTotal) * 100)
+  : 0;
 
   return (
     <section style={panelStyles}>
@@ -130,7 +134,7 @@ export default function DataTables({ products, mappingRows, productCount, mappin
         <div style={{ marginTop: 16, padding: 12, borderRadius: 10, backgroundColor: "#f8fafc", border: "1px solid #cbd5e1" }}>
           <div style={{ marginBottom: 6, fontWeight: 700 }}>Latest sync job</div>
           <div>Status: {latestSyncJob.status}</div>
-          <div>Processed: {latestSyncJob.processed}/{latestSyncJob.total}</div>
+          <div>Processed: {latestSyncJob.processed}/{safeTotal}</div>
           <div style={{ marginTop: 10, width: "100%" }}>
             <div style={{
               width: "100%",
