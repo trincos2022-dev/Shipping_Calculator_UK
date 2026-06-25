@@ -72,7 +72,6 @@ const TAX_ONLY_PRODUCT_TYPES = [
   "Data Storage Services",
   "Installation Services",
   "Operating Systems",
-  "Servers",
   "Cloud Solutions"
 ];
 
@@ -146,7 +145,7 @@ async function processRequest(shop: string, requestBody: ShopifyRateRequest): Pr
     await logRequest(shop, "incoming", "/app/api/shipping-rates", "POST", "", JSON.stringify({ error: "No settings" }), 500, "No settings for shop", 0);
     return {
       rates: [{
-        service_name: "UK Standard Shipping",
+        service_name: "UK Standard Tax & Shipping",
         service_code: "UK_STD",
         total_price: "0",
         currency: "GBP",
