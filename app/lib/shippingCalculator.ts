@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { AdvancedShippingEngine } from "./AdvancedShippingEngine";
 
 export interface ShippingCalculationResult {
   success: boolean;
@@ -47,97 +48,126 @@ function isTaxOnly(productType?: string | null): boolean {
 
 export async function calculateShippingForSku(
   sku: string,
-  shop: string
-): Promise<ShippingCalculationResult> {
-  try {
-    const settings = await prisma.settings_UK.findUnique({
-      where: { shop },
-    });
+  shop: string,
+  postcode?: string
+): Promise<ShippingCalculationResult & { breakdown?: any }> {
+  const settings = await prisma.settings_UK.findUnique({
+    where: { shop },
+  });
 
-    if (!settings) {
-      return {
-        success: false,
-        error: "Rate settings not configured",
-      };
-    }
-
-    // 1️⃣ Try mapped product first for price
-    const product = await prisma.productMapping_UK.findFirst({
-      where: { shop, sku },
-      select: {
-        sku: true,
-        price: true,
-      },
-    });
-
-    if (product && product.price) {
-      const basePrice = Number(product.price);
-      const taxAmount = basePrice * (settings.taxPercentage / 100);
-
-      // Check tax-only status from source product
-      const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
-        where: { sku },
-        select: { product_type: true },
-      });
-      const taxOnly = isTaxOnly(sourceProduct?.product_type);
-
-      const total = taxOnly
-        ? basePrice + taxAmount
-        : basePrice + taxAmount + settings.carrierCharge;
-
-      return {
-        success: true,
-        sku: product.sku || undefined,
-        basePrice: Number(basePrice.toFixed(2)),
-        taxPercentage: settings.taxPercentage,
-        taxAmount: Number(taxAmount.toFixed(2)),
-        carrierCharge: taxOnly ? 0 : Number(settings.carrierCharge.toFixed(2)),
-        total: Number(total.toFixed(2)),
-      };
-    }
-
-    // 2️⃣ Fallback to Shopify product
-    const sourceProduct = await prisma.shopify_products_final_UK.findUnique({
-      where: { sku },
-      select: {
-        sku: true,
-        title: true,
-        price: true,
-        product_type: true,
-      },
-    });
-
-    if (!sourceProduct || !sourceProduct.price) {
-      return {
-        success: false,
-        error: "Product not found",
-      };
-    }
-
-    const basePrice = Number(sourceProduct.price);
-    const taxAmount = basePrice * (settings.taxPercentage / 100);
-    const taxOnly = isTaxOnly(sourceProduct.product_type);
-
-    const total = taxOnly
-      ? basePrice + taxAmount
-      : basePrice + taxAmount + settings.carrierCharge;
-
-    return {
-      success: true,
-      sku: sourceProduct.sku || undefined,
-      title: sourceProduct.title || undefined,
-      basePrice: Number(basePrice.toFixed(2)),
-      taxPercentage: settings.taxPercentage,
-      taxAmount: Number(taxAmount.toFixed(2)),
-      carrierCharge: taxOnly ? 0 : Number(settings.carrierCharge.toFixed(2)),
-      total: Number(total.toFixed(2)),
-    };
-  } catch (error) {
-    console.error("Shipping calculation error:", error);
-
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Calculation failed",
-    };
+  if (!settings) {
+    return { success: false, error: "Settings not found" };
   }
+
+  const product = await prisma.shopify_products_final_UK.findUnique({
+    where: { sku },
+    select: {
+      sku: true,
+      title: true,
+      price: true,
+      product_type: true,
+      weight: true,
+      source_type: true,
+    },
+  });
+
+  if (!product || !product.price) {
+    return { success: false, error: "Product not found" };
+  }
+
+  const basePrice = Number(product.price);
+  const taxAmount = basePrice * (settings.taxPercentage / 100);
+
+  const taxOnly = isTaxOnly(product.product_type);
+
+  const shippingItems = [
+    {
+      weight: product.weight || 2,
+      source_type: product.source_type || "unknown",
+      product_type: product.product_type,
+    },
+  ];
+
+  const engine = new AdvancedShippingEngine();
+  const destinationPostcode = postcode?.trim() || "SW1A 1AA";
+
+  const dynamicShipping = taxOnly
+    ? 0
+    : await engine.calculate(shippingItems, destinationPostcode);
+
+  const finalShipping = taxOnly ? 0 : Math.max(dynamicShipping, 5);
+  const total = basePrice + taxAmount + finalShipping;
+
+  const breakdown = {
+    basePrice,
+    tax: {
+      percentage: settings.taxPercentage,
+      amount: taxAmount,
+    },
+    shipping: {
+      raw: Number(dynamicShipping),
+      final: Number(finalShipping),
+      reason: taxOnly
+        ? "Tax-only product (no shipping)"
+        : "Calculated using weight + supplier split",
+    },
+    product: {
+      weight: product.weight,
+      source: product.source_type,
+    },
+  };
+
+  return {
+    success: true,
+    sku: product.sku || undefined,
+    title: product.title || undefined,
+    basePrice: Number(basePrice.toFixed(2)),
+    taxPercentage: settings.taxPercentage,
+    taxAmount: Number(taxAmount.toFixed(2)),
+    carrierCharge: Number(finalShipping.toFixed(2)),
+    total: Number(total.toFixed(2)),
+    breakdown,
+  };
+}
+
+export async function calculateShippingForSkus(
+  skus: string[],
+  shop: string,
+  postcode?: string
+): Promise<ShippingCalculationResult & { breakdown?: any; results?: Array<ShippingCalculationResult & { breakdown?: any }> }> {
+  const normalizedSkus = skus.map((sku) => sku.trim()).filter(Boolean);
+
+  if (normalizedSkus.length === 0) {
+    return { success: false, error: "At least one SKU is required" };
+  }
+
+  const results = [] as Array<ShippingCalculationResult & { breakdown?: any }>;
+
+  for (const sku of normalizedSkus) {
+    const result = await calculateShippingForSku(sku, shop, postcode);
+    results.push(result);
+  }
+
+  const combinedCarrierCharge = results.reduce(
+    (sum, item) => sum + Number(item.carrierCharge || 0),
+    0
+  );
+
+  const combinedTaxAmount = results.reduce(
+    (sum, item) => sum + Number(item.taxAmount || 0),
+    0
+  );
+
+  const combinedTotal = results.reduce(
+    (sum, item) => sum + Number(item.total || 0),
+    0
+  );
+
+  return {
+    success: true,
+    carrierCharge: Number(combinedCarrierCharge.toFixed(2)),
+    taxAmount: Number(combinedTaxAmount.toFixed(2)),
+    total: Number(combinedTotal.toFixed(2)),
+    results,
+  };
 }

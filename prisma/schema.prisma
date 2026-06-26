@@ -78,6 +78,7 @@ model shopify_products_final_UK {
   created_at           DateTime? @default(now()) @db.Timestamptz(6)
   part_number          String?
   source_type          String?
+  weight               Float?
 
   @@index([id], map: "idx_products_id")
   @@schema("public")
@@ -120,6 +121,29 @@ model RequestLog_UK {
   @@map("RequestLog_UK")
   @@schema("public")
 }
+
+model shipping_zone_prefixes {
+  id        Int    @id @default(autoincrement())
+  prefix    String
+  zone_code String
+
+  @@index([prefix])
+  @@schema("public")
+
+}
+
+model shipping_rules_UK {
+  id         Int      @id @default(autoincrement())
+  zone_code  String
+  min_weight Float
+  max_weight Float
+  price      Float
+
+  @@index([zone_code])
+  @@schema("public")
+  @@map("shipping_rules_uk")
+}
+
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.

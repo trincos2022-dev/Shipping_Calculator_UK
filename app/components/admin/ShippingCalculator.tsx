@@ -1,9 +1,42 @@
 import { useState, type FormEvent } from "react";
 import type { ShippingCalculationResult } from "./types";
 
+interface ExtendedResult extends ShippingCalculationResult {
+  breakdown?: {
+    basePrice: number;
+    tax: {
+      percentage: number;
+      amount: number;
+    };
+    shipping: {
+      raw: number;
+      final: number;
+      reason: string;
+    };
+    product: {
+      weight?: number;
+      source?: string;
+    };
+  };
+}
+
+interface MultiResult {
+  success: boolean;
+  error?: string;
+  results?: ExtendedResult[];
+  carrierCharge?: number;
+  taxAmount?: number;
+  total?: number;
+}
+
 interface Props {
   defaultCarrierCharge: number;
   defaultTaxRate: number;
+}
+
+interface SkuRow {
+  id: number;
+  value: string;
 }
 
 const panelStyles: React.CSSProperties = {
@@ -20,8 +53,6 @@ const inputStyles: React.CSSProperties = {
   padding: 10,
   border: "1px solid #cbd5e1",
   borderRadius: 8,
-  outline: "none",
-  boxSizing: "border-box",
 };
 
 const buttonStyles: React.CSSProperties = {
@@ -30,9 +61,8 @@ const buttonStyles: React.CSSProperties = {
   borderRadius: 8,
   border: "none",
   backgroundColor: "#2f6fdb",
-  color: "#ffffff",
+  color: "#fff",
   fontWeight: 700,
-  transition: "background-color 0.2s ease",
   marginTop: 12,
 };
 
@@ -44,38 +74,47 @@ const billStyles: React.CSSProperties = {
   border: "1px solid #e2e8f0",
 };
 
-const billRowStyles: React.CSSProperties = {
+const row = (bold = false) => ({
   display: "flex",
   justifyContent: "space-between",
   padding: "8px 0",
-  borderBottom: "1px solid #e2e8f0",
   fontSize: 14,
-};
+  fontWeight: bold ? 700 : 400,
+});
 
-const billTotalStyles: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "12px 0 0",
-  fontSize: 16,
-  fontWeight: 700,
-  color: "#0f172a",
-};
-
-export default function ShippingCalculatorPanel({ defaultCarrierCharge, defaultTaxRate }: Props) {
-  const [sku, setSku] = useState("");
+export default function ShippingCalculatorPanel({
+  defaultCarrierCharge,
+  defaultTaxRate,
+}: Props) {
+  const [skuRows, setSkuRows] = useState<SkuRow[]>([{ id: 1, value: "" }]);
+  const [postcode, setPostcode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<ShippingCalculationResult | null>(null);
+  const [result, setResult] = useState<MultiResult | null>(null);
+
+  const updateSkuRow = (id: number, value: string) => {
+    setSkuRows((rows) => rows.map((row) => (row.id === id ? { ...row, value } : row)));
+  };
+
+  const addSkuRow = () => {
+    setSkuRows((rows) => [...rows, { id: Date.now(), value: "" }]);
+  };
+
+  const removeSkuRow = (id: number) => {
+    setSkuRows((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== id) : rows));
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!sku.trim()) return;
+    const skus = skuRows.map((row) => row.value.trim()).filter(Boolean);
+    if (skus.length === 0) return;
 
     setIsLoading(true);
     setResult(null);
 
     try {
       const formData = new FormData();
-      formData.append("sku", sku.trim());
+      skus.forEach((sku) => formData.append("sku", sku));
+      formData.append("postcode", postcode.trim());
 
       const response = await fetch("/app/calculate-shipping", {
         method: "POST",
@@ -84,7 +123,7 @@ export default function ShippingCalculatorPanel({ defaultCarrierCharge, defaultT
 
       const data = await response.json();
       setResult(data);
-    } catch (error) {
+    } catch {
       setResult({
         success: false,
         error: "Failed to calculate shipping",
@@ -96,35 +135,75 @@ export default function ShippingCalculatorPanel({ defaultCarrierCharge, defaultT
 
   return (
     <section style={panelStyles}>
-      <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: 18 }}>Shipping Calculator</h2>
-      <p style={{ color: "#475569", lineHeight: 1.5, margin: 0, marginBottom: 16 }}>
-        Enter a product SKU to calculate shipping costs using the configured tax rate and carrier charge.
+      <h2>Shipping Calculator</h2>
+      <p style={{ color: "#475569" }}>
+        Enter one or more SKUs and optionally a destination postcode to calculate shipping using the advanced engine.
       </p>
 
-      <form method="post" onSubmit={handleSubmit}>
-        <label style={{ display: "block", fontWeight: 600, color: "#334155" }}>
-          Product SKU
-          <input
-            type="text"
-            name="sku"
-            value={sku}
-            onChange={(e) => setSku(e.target.value)}
-            placeholder="Enter SKU (e.g., SKU-12345)"
-            style={inputStyles}
-            required
-          />
-        </label>
+      <form onSubmit={handleSubmit}>
+        {skuRows.map((row, index) => (
+          <div key={row.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="text"
+              value={row.value}
+              onChange={(e) => updateSkuRow(row.id, e.target.value)}
+              placeholder={`SKU ${index + 1}`}
+              style={{ ...inputStyles, marginTop: 8, marginBottom: 4 }}
+            />
+
+            {skuRows.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeSkuRow(row.id)}
+                style={{
+                  marginTop: 8,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: 18,
+                  color: "#64748b",
+                }}
+                aria-label="Remove SKU"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={addSkuRow}
+          style={{
+            marginTop: 8,
+            border: "none",
+            background: "transparent",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontWeight: 600,
+            padding: 0,
+          }}
+        >
+          ＋ Add SKU
+        </button>
+
+        <input
+          type="text"
+          value={postcode}
+          onChange={(e) => setPostcode(e.target.value)}
+          placeholder="Optional postcode (e.g. SW1A 1AA)"
+          style={inputStyles}
+        />
 
         <button
           type="submit"
-          disabled={isLoading || !sku.trim()}
+          disabled={isLoading || skuRows.every((row) => !row.value.trim())}
           style={{
             ...buttonStyles,
-            opacity: isLoading || !sku.trim() ? 0.6 : 1,
-            cursor: isLoading || !sku.trim() ? "not-allowed" : "pointer",
+            opacity: isLoading ? 0.6 : 1,
           }}
         >
-          {isLoading ? "Calculating..." : "Calculate Shipping"}
+          {isLoading ? "Calculating..." : "Calculate"}
         </button>
       </form>
 
@@ -132,43 +211,85 @@ export default function ShippingCalculatorPanel({ defaultCarrierCharge, defaultT
         <div style={billStyles}>
           {result.success ? (
             <>
-              <div style={{ marginBottom: 12, fontWeight: 600, color: "#334155" }}>
-                Calculation Result
+              <div style={row(true)}>
+                <span>Items</span>
+                <span>{result.results?.length ?? 1}</span>
               </div>
-              <div style={billRowStyles}>
-                <span style={{ color: "#475569" }}>Base Price</span>
-                <span>£{result.basePrice?.toFixed(2)}</span>
-              </div>
-              <div style={billRowStyles}>
-                <span style={{ color: "#475569" }}>Tax ({result.taxPercentage}%)</span>
-                <span>£{result.taxAmount?.toFixed(2)}</span>
-              </div>
-              <div style={billRowStyles}>
-                <span style={{ color: "#475569" }}>Carrier Charge</span>
-                <span>£{result.carrierCharge?.toFixed(2)}</span>
-              </div>
-              <div style={billTotalStyles}>
-                <span>Total</span>
-                <span>£{result.total?.toFixed(2)}</span>
-              </div>
-              {result.title && (
-                <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-                  Product: {result.title}
+
+              {(result.results ?? []).map((item, index) => (
+                <div
+                  key={item.sku || index}
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: "#ffffff",
+                    borderRadius: 6,
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <strong>{item.title || item.sku || `SKU ${index + 1}`}</strong>
+
+                  {item.success ? (
+                    <>
+                      <div style={{ marginTop: 6 }}>
+                        Base Price: £{Number(item.basePrice || 0).toFixed(2)}
+                      </div>
+                      <div>Tax: £{Number(item.taxAmount || 0).toFixed(2)}</div>
+                      <div>Shipping: £{Number(item.carrierCharge || 0).toFixed(2)}</div>
+                      <div>Total: £{Number(item.total || 0).toFixed(2)}</div>
+
+                      {item.breakdown && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: 8,
+                            background: "#f1f5f9",
+                            borderRadius: 6,
+                            fontSize: 13,
+                          }}
+                        >
+                          <strong>Detailed Breakdown</strong>
+
+                          <div style={{ marginTop: 6 }}>
+                            Weight: {item.breakdown.product.weight || "N/A"} kg
+                          </div>
+
+                          <div>Source: {item.breakdown.product.source || "Unknown"}</div>
+
+                          <div style={{ marginTop: 6 }}>{item.breakdown.shipping.reason}</div>
+
+                          <div style={{ marginTop: 4 }}>
+                            Raw Shipping: £{Number(item.breakdown.shipping.raw || 0).toFixed(2)}
+                          </div>
+
+                          <div>
+                            Final Shipping (min applied): £{Number(item.breakdown.shipping.final || 0).toFixed(2)}
+                          </div>
+
+                          <div style={{ marginTop: 4 }}>
+                            Tax Applied: {item.breakdown.tax.percentage}%
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ marginTop: 6, color: "#dc2626" }}>
+                      {item.error || "Unable to calculate shipping for this SKU."}
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </>
           ) : (
-            <div style={{ color: "#ef4444", fontWeight: 600 }}>
-              {result.error || "Calculation failed"}
-            </div>
+            <div style={{ color: "red" }}>{result.error}</div>
           )}
         </div>
       )}
 
-      <div style={{ marginTop: 18, fontSize: 14, color: "#334155" }}>
-        <strong>Default values:</strong>
-        <div>Tax rate: {defaultTaxRate}%</div>
-        <div>Carrier charge: £{defaultCarrierCharge}</div>
+      <div style={{ marginTop: 15 }}>
+        <strong>Defaults:</strong>
+        <div>Tax: {defaultTaxRate}%</div>
+        <div>Old Flat Shipping: £{defaultCarrierCharge}</div>
       </div>
     </section>
   );

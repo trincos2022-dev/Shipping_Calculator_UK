@@ -19,6 +19,8 @@ import type {
   LogRow,
   RequestLogEntry,
 } from "../components/admin/types";
+import ShippingRulesPanel from "../components/admin/ShippingRulesPanel";
+
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const authResult = await authenticate.admin(request);
@@ -417,6 +419,10 @@ export default function Index() {
         <ConnectionPanel carrierService={carrierService} />
         <RateSettingsPanel settings={currentRates} />
       </section>
+      
+      <div style={{ marginTop: 30 }}>
+        <ShippingRulesPanel />
+      </div>
 
       <div style={{ marginTop: 20 }}>
         <ShippingCalculatorPanel 
@@ -424,11 +430,11 @@ export default function Index() {
           defaultTaxRate={currentRates.taxRate} 
         />
       </div>
+      <LogsPanel logs={logs} />
 
       <RequestLogsPanel logs={requestLogs} />
 
       <DataTables products={mainData} mappingRows={mappingRows} productCount={productCount} mappingCount={mappingCount} latestSyncJob={latestSyncJob} />
-      <LogsPanel logs={logs} />
     </main>
   );
 }

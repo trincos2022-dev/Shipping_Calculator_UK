@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { calculateShippingForSku } from "../lib/shippingCalculator";
+import { calculateShippingForSkus } from "../lib/shippingCalculator";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const authResult = await authenticate.admin(request);
@@ -15,31 +15,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const formData = await request.formData();
-  const sku = formData.get("sku");
+  const postcode = formData.get("postcode");
+  const submittedSkus = formData.getAll("sku");
+  const skus = submittedSkus
+    .map((sku) => (typeof sku === "string" ? sku.trim() : ""))
+    .filter(Boolean);
 
-  if (!sku || typeof sku !== "string") {
+  if (skus.length === 0) {
     return { success: false, error: "SKU is required" };
   }
 
-  const result = await calculateShippingForSku(sku.trim(), session.shop);
+  const result = await calculateShippingForSkus(
+    skus,
+    session.shop,
+    typeof postcode === "string" ? postcode.trim() : undefined
+  );
 
-  if (result.success) {
-    await prisma.shippingCalculationLog_UK.create({
-      data: {
-        shop: session.shop,
-        sku: result.sku || sku.trim(),
-        basePrice: result.basePrice || 0,
-        taxAmount: result.taxAmount || 0,
-        carrierCharge: result.carrierCharge || 0,
-        total: result.total || 0,
-        status: "Success",
-      },
-    });
+  if (result.success && Array.isArray(result.results)) {
+    for (const item of result.results) {
+      await prisma.shippingCalculationLog_UK.create({
+        data: {
+          shop: session.shop,
+          sku: item.sku || "",
+          basePrice: item.basePrice || 0,
+          taxAmount: item.taxAmount || 0,
+          carrierCharge: item.carrierCharge || 0,
+          total: item.total || 0,
+          status: "Success",
+        },
+      });
+    }
   } else {
     await prisma.shippingCalculationLog_UK.create({
       data: {
         shop: session.shop,
-        sku: sku.trim(),
+        sku: skus[0],
         basePrice: 0,
         taxAmount: 0,
         carrierCharge: 0,
