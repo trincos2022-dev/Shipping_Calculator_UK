@@ -91,7 +91,20 @@ export class AdvancedShippingEngine {
 
   calculateWeight(items: ShippingItem[]): number {
     return items.reduce((sum, item) => {
-      return sum + (Number(item.weight) || this.getDefaultWeight(item));
+      const weightVal = Number(item.weight);
+
+      const finalWeight =
+        item.weight != null && !isNaN(weightVal) && weightVal > 0
+          ? weightVal
+          : this.getDefaultWeight(item);
+
+      console.log("⚖️ [WEIGHT RESOLVE]:", {
+        originalWeight: item.weight,
+        product_type: item.product_type,
+        finalWeight,
+      });
+
+      return sum + finalWeight;
     }, 0);
   }
 

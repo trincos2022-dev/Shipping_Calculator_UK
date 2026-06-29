@@ -118,11 +118,16 @@ export async function calculateShippingForSku(
 
   const shippingItems = [
     {
-      weight: product.weight ?? 2,
+      weight: product.weight,
       source_type: normalizedSourceType,
       product_type: product.product_type,
     },
   ];
+  
+  console.log("📦 [ITEM INPUT]:", {
+    dbWeight: product.weight,
+    productType: product.product_type
+  });
 
   const engine = new AdvancedShippingEngine();
   const destinationPostcode = postcode?.trim() || "SW1A 1AA";
