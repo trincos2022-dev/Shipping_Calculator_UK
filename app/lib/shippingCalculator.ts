@@ -13,6 +13,27 @@ export interface ShippingCalculationResult {
   error?: string;
 }
 
+interface ShippingBreakdown {
+  basePrice: number;
+  tax: {
+    percentage: number;
+    amount: number;
+  };
+  shipping: {
+    raw: number;
+    final: number;
+    reason: string;
+  };
+  product: {
+    weight: number | null | undefined;
+    source: string;
+  };
+}
+
+interface ShippingCalculationWithBreakdown extends ShippingCalculationResult {
+  breakdown?: ShippingBreakdown;
+}
+
 const TAX_ONLY_PRODUCT_TYPES = [
   "Security Software",
   "Manufacturing Equipment Repair Services",
@@ -34,23 +55,39 @@ const TAX_ONLY_PRODUCT_TYPES = [
   "Installation Services",
   "Operating Systems",
   "Servers",
-  "Cloud Solutions"
+  "Cloud Solutions",
 ];
 
 function isTaxOnly(productType?: string | null): boolean {
   return productType
     ? TAX_ONLY_PRODUCT_TYPES.some(
-        (type) =>
-          type.toLowerCase().trim() === productType.toLowerCase().trim()
+        (type) => type.toLowerCase().trim() === productType.toLowerCase().trim()
       )
     : false;
+}
+
+function parseSourceType(sourceType?: string | null): string {
+  const raw = (sourceType ?? "unknown").toString().trim();
+  let parsedSource = raw;
+
+  if (raw.includes("(")) {
+    const match = raw.match(/\(([^)]+)\)/);
+    parsedSource = match?.[1] ?? raw;
+  }
+
+  parsedSource = parsedSource.toLowerCase();
+
+  console.log("Source Type Raw:", raw);
+  console.log("Parsed Source:", parsedSource);
+
+  return parsedSource || "unknown";
 }
 
 export async function calculateShippingForSku(
   sku: string,
   shop: string,
   postcode?: string
-): Promise<ShippingCalculationResult & { breakdown?: any }> {
+): Promise<ShippingCalculationWithBreakdown> {
   const settings = await prisma.settings_UK.findUnique({
     where: { shop },
   });
@@ -75,21 +112,26 @@ export async function calculateShippingForSku(
     return { success: false, error: "Product not found" };
   }
 
+  const normalizedSourceType = parseSourceType(product.source_type);
   const basePrice = Number(product.price);
   const taxAmount = basePrice * (settings.taxPercentage / 100);
-
   const taxOnly = isTaxOnly(product.product_type);
 
   const shippingItems = [
     {
-      weight: product.weight || 2,
-      source_type: product.source_type || "unknown",
+      weight: product.weight ?? 2,
+      source_type: normalizedSourceType,
       product_type: product.product_type,
     },
   ];
 
   const engine = new AdvancedShippingEngine();
   const destinationPostcode = postcode?.trim() || "SW1A 1AA";
+
+  console.log("Shipping input:", {
+    destinationPostcode,
+    shippingItems,
+  });
 
   const dynamicShipping = taxOnly
     ? 0
@@ -98,7 +140,7 @@ export async function calculateShippingForSku(
   const finalShipping = taxOnly ? 0 : Math.max(dynamicShipping, 5);
   const total = basePrice + taxAmount + finalShipping;
 
-  const breakdown = {
+  const breakdown: ShippingBreakdown = {
     basePrice,
     tax: {
       percentage: settings.taxPercentage,
@@ -113,7 +155,7 @@ export async function calculateShippingForSku(
     },
     product: {
       weight: product.weight,
-      source: product.source_type,
+      source: normalizedSourceType,
     },
   };
 
@@ -134,14 +176,14 @@ export async function calculateShippingForSkus(
   skus: string[],
   shop: string,
   postcode?: string
-): Promise<ShippingCalculationResult & { breakdown?: any; results?: Array<ShippingCalculationResult & { breakdown?: any }> }> {
+): Promise<ShippingCalculationResult & { breakdown?: ShippingBreakdown; results?: Array<ShippingCalculationWithBreakdown> }> {
   const normalizedSkus = skus.map((sku) => sku.trim()).filter(Boolean);
 
   if (normalizedSkus.length === 0) {
     return { success: false, error: "At least one SKU is required" };
   }
 
-  const results = [] as Array<ShippingCalculationResult & { breakdown?: any }>;
+  const results: ShippingCalculationWithBreakdown[] = [];
 
   for (const sku of normalizedSkus) {
     const result = await calculateShippingForSku(sku, shop, postcode);

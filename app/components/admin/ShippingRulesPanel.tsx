@@ -116,6 +116,7 @@ export default function ShippingRulesPanel() {
                   <option value="ZONE_1">ZONE 1 (Mainland)</option>
                   <option value="ZONE_2">ZONE 2 (Highlands)</option>
                   <option value="ZONE_3">ZONE 3 (N. Ireland)</option>
+                  <option value="ZONE_4">ZONE 4 (Offshore)</option>
                 </select>
               </td>
 
