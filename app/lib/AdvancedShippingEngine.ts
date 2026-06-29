@@ -38,9 +38,15 @@ export class AdvancedShippingEngine {
       let rate = await this.getRate(zone, weight);
 
       if (weight > 30) {
-        const surcharge = (weight - 30) * 0.5;
+        const extraWeight = weight - 30;
+        const surcharge = extraWeight * 0.5;
+
+        console.log("🚚 [HEAVY] Extra weight:", extraWeight);
+        console.log("🚚 [HEAVY] Surcharge (£0.5/kg):", surcharge);
+
         rate += surcharge;
-        console.log("Heavy surcharge applied:", { weight, surcharge, rate });
+
+        console.log("✅ [FINAL RATE AFTER SURCHARGE]:", rate);
       }
 
       totalShipping += rate;
@@ -49,8 +55,10 @@ export class AdvancedShippingEngine {
     const finalShipping = Math.ceil(totalShipping);
     const parsedSources = Array.from(
       new Set(
-        shipments.map((shipment) => parseSourceType(shipment?.[0]?.source_type))
-      )
+        shipments.map((shipment) =>
+          parseSourceType(shipment?.[0]?.source_type),
+        ),
+      ),
     ).filter(Boolean);
 
     console.log("Final Result:", {
@@ -96,7 +104,9 @@ export class AdvancedShippingEngine {
     }
   }
 
-  async getZone(postcode: string): Promise<{ zone: string; prefix: string; number: number }> {
+  async getZone(
+    postcode: string,
+  ): Promise<{ zone: string; prefix: string; number: number }> {
     console.log("Postcode:", postcode);
 
     try {
@@ -150,8 +160,8 @@ export class AdvancedShippingEngine {
   async getRate(zone: string, weight: number): Promise<number> {
     const weightNum = Number(weight);
 
-    console.log("Weight:", weightNum);
-    console.log("Zone used:", zone);
+    console.log("📦 [RATE] Weight:", weightNum);
+    console.log("📍 [ZONE] Zone used:", zone);
 
     try {
       const rules = await prisma.shipping_rules_UK.findMany({
@@ -164,30 +174,36 @@ export class AdvancedShippingEngine {
         const max = Number(rule.max_weight ?? 0);
         const price = Number(rule.price ?? 0);
 
-        if (isNaN(min) || isNaN(max) || isNaN(price)) {
-          return false;
-        }
-
-        return weightNum >= min && weightNum < max;
+        return (
+          !isNaN(min) &&
+          !isNaN(max) &&
+          !isNaN(price) &&
+          weightNum >= min &&
+          weightNum < max
+        );
       });
 
-      const price = match ? Number(match.price) : 0;
-      console.log("Matched Price:", price);
-
       if (match) {
+        const price = Number(match.price);
+        console.log("✅ [MATCH] Price found in table:", price);
         return price;
       }
 
+      // ✅ FIXED: proper fallback for heavy items
       if (weightNum > 30) {
-        const fallback = 30 + (weightNum - 30);
-        console.log("Fallback applied: weight above table, fallback price", fallback);
-        return fallback;
+        const lastRule = rules[rules.length - 1]; // highest tier (20–30kg)
+        const basePrice = Number(lastRule?.price ?? 0);
+
+        console.log("⚠️ [FALLBACK] Weight exceeds table");
+        console.log("📊 Using base tier price (20–30kg):", basePrice);
+
+        return basePrice;
       }
 
-      console.log("Fallback applied: ZONE_1 pricing or no match. Returning 0");
+      console.log("⚠️ [FALLBACK] No matching rule. Returning 0");
       return 0;
     } catch (error) {
-      console.log("Fallback applied: ZONE_1", error);
+      console.log("❌ [ERROR] getRate fallback ZONE_1", error);
       return 0;
     }
   }
