@@ -73,7 +73,9 @@ const TAX_ONLY_PRODUCT_TYPES = [
   "Data Storage Services",
   "Installation Services",
   "Operating Systems",
-  "Cloud Solutions"
+  "Cloud Solutions",
+  "Storage Software",
+  "Maintenance & Support Fees",
 ];
 
 function isTaxOnly(productType?: string | null): boolean {
