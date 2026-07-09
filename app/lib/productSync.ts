@@ -179,6 +179,7 @@ export async function syncProductsForShop(
             sku: product.sku,
             price: product.price,
             ingramPartNumber: product.part_number,
+            weight: product.weight,
           },
         });
 
