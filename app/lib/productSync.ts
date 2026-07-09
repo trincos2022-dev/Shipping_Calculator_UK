@@ -114,6 +114,7 @@ export async function syncProductsForShop(
         sku: true,
         price: true,
         part_number: true,
+        weight: true,
       },
       orderBy: { sku: "asc" },
       take: BATCH_SIZE,
@@ -171,6 +172,7 @@ export async function syncProductsForShop(
           update: {
             price: product.price,
             ingramPartNumber: product.part_number,
+            weight: product.weight,
           },
           create: {
             shop,

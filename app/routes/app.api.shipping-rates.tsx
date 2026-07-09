@@ -268,7 +268,7 @@ async function processRequest(
   return {
     rates: [
       {
-        service_name: "UK Standard Shipping",
+        service_name: "UK Standard Tax & Shipping",
         service_code: "UK_STD",
         total_price: Math.round(shippingCost * 100).toString(),
         currency: "GBP",
