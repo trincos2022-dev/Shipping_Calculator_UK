@@ -250,8 +250,9 @@ async function processRequest(
       : await engine.calculate(expandedItems, postcode);
 
   // ✅ PROTECTION: minimum shipping
-  const finalShipping = Math.max(dynamicShipping, 5);
-
+  const finalShipping =
+    allItemsTaxOnly ? 0 : Math.max(dynamicShipping, 5);
+    
   // ✅ FINAL COST
   const shippingCost = taxAmount + finalShipping;
 
