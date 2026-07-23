@@ -41,12 +41,12 @@ export class AdvancedShippingEngine {
         const extraWeight = weight - 30;
         const surcharge = extraWeight * 0.5;
 
-        console.log("🚚 [HEAVY] Extra weight:", extraWeight);
-        console.log("🚚 [HEAVY] Surcharge (£0.5/kg):", surcharge);
+        console.log("[HEAVY] Extra weight:", extraWeight);
+        console.log("[HEAVY] Surcharge (£0.5/kg):", surcharge);
 
         rate += surcharge;
 
-        console.log("✅ [FINAL RATE AFTER SURCHARGE]:", rate);
+        console.log("[FINAL RATE AFTER SURCHARGE]:", rate);
       }
 
       totalShipping += rate;
@@ -98,7 +98,7 @@ export class AdvancedShippingEngine {
           ? weightVal
           : this.getDefaultWeight(item);
 
-      console.log("⚖️ [WEIGHT RESOLVE]:", {
+      console.log("[WEIGHT RESOLVE]:", {
         originalWeight: item.weight,
         product_type: item.product_type,
         finalWeight,
@@ -111,7 +111,7 @@ export class AdvancedShippingEngine {
   getDefaultWeight(item: ShippingItem): number {
     switch (item.product_type) {
       case "Servers":
-        return 20;
+        return 30;
       default:
         return 2;
     }

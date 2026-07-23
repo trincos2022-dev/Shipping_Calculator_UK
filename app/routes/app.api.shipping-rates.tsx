@@ -206,7 +206,7 @@ async function processRequest(
 
     totalPriceGbp += priceGbp * item.quantity;
 
-    // ✅ FIXED: source_type safety
+    // FIXED: source_type safety
     shippingItems.push({
       sku: item.sku,
       weight: weight || item.grams / 1000 || 1,
@@ -302,6 +302,9 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     if (requestBodyStr) {
       requestBody = JSON.parse(requestBodyStr);
+
+      console.log("=== FULL SHOPIFY CHECKOUT REQUEST ===");
+      console.log(JSON.stringify(requestBody, null, 2));
     }
   } catch {
     // Keep as null if parse fails
