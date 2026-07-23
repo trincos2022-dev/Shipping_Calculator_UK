@@ -76,6 +76,7 @@ const TAX_ONLY_PRODUCT_TYPES = [
   "Cloud Solutions",
   "Storage Software",
   "Maintenance & Support Fees",
+  "Gift Cards & Certificates"
 ];
 
 function isTaxOnly(productType?: string | null): boolean {
