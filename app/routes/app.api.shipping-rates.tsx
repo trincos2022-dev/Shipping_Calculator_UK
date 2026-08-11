@@ -144,6 +144,12 @@ async function getProduct(shop: string, sku: string): Promise<{
   return { price, productType, weight, source_type };
 }
 
+function resolveRealWeight(dbWeight: number | null, grams: number): number | null {
+  if (dbWeight && dbWeight > 0) return dbWeight;
+  if (grams && grams > 0) return grams / 1000;
+  return null; // let the engine apply the product-type default
+}
+
 async function processRequest(
   shop: string,
   requestBody: ShopifyRateRequest
@@ -209,7 +215,7 @@ async function processRequest(
     // FIXED: source_type safety
     shippingItems.push({
       sku: item.sku,
-      weight: weight || item.grams / 1000 || 1,
+      weight: resolveRealWeight(weight, item.grams),
       product_type: productType,
       source_type: source_type || "unknown",
       quantity: item.quantity,
